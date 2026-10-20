@@ -4,6 +4,8 @@ import { ClientFields } from "@/components/client-fields";
 import { ActionForm, SubmitButton } from "@/components/form";
 import { Badge, Button, ButtonLink, Card, Notice, PageHeader, SectionTitle, formatDate } from "@/components/ui";
 import { deleteClient, updateClient } from "@/lib/actions/clients";
+import { syncClientToBigin } from "@/lib/actions/integrations";
+import { listConnections } from "@/lib/integrations/store";
 import { requireWorkspace } from "@/lib/auth";
 import { matterRef, type Client, type Matter } from "@/lib/types";
 
@@ -15,6 +17,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
   if (!client) notFound();
   const { data: matters } = await ws.supabase.from("matters").select("id, number, title, status, opened_on")
     .eq("org_id", ws.org.id).eq("client_id", client.id).order("number", { ascending: false });
+  const bigin = (await listConnections(ws.supabase, ws.org.id)).find((c) => c.provider === "zoho_bigin");
 
   return (
     <>
@@ -47,12 +50,22 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
         </ActionForm>
       </Card>
 
-      <SectionTitle>CRM</SectionTitle>
-      <p className="text-sm text-muted">
-        {client.crm_sync_status === "synced" ? `Synced to CRM on ${formatDate(client.crm_synced_at, true)}.`
-          : client.crm_sync_status === "failed" ? `Last sync failed: ${client.crm_error ?? "unknown error"}.`
-          : "Not synced. Connect Zoho Bigin in Settings → Integrations (coming in the next release)."}
-      </p>
+      <SectionTitle>CRM (Zoho Bigin)</SectionTitle>
+      <Card className="max-w-2xl p-5">
+        <p className="text-sm text-muted">
+          {client.crm_sync_status === "synced" ? `In Bigin as a ${client.kind === "organization" ? "Company" : "Contact"} · last synced ${formatDate(client.crm_synced_at, true)}.`
+            : client.crm_sync_status === "failed" ? `Last sync failed: ${client.crm_error ?? "unknown error"}.`
+            : bigin ? `Not in Bigin yet. Syncing creates a ${client.kind === "organization" ? "Company" : "Contact"} record.`
+            : "Connect Zoho Bigin in Settings → Integrations to sync this client."}
+        </p>
+        {client.crm_sync_status === "failed" && <div className="mt-2"><Notice tone="bad">Check the details above (for example a valid email) and try again.</Notice></div>}
+        {bigin && (
+          <form action={syncClientToBigin} className="mt-3">
+            <input type="hidden" name="id" value={client.id} />
+            <SubmitButton pendingLabel="Syncing…" variant="secondary">{client.crm_id ? "Update in Bigin" : "Send to Bigin"}</SubmitButton>
+          </form>
+        )}
+      </Card>
 
       <form action={deleteClient} className="mt-10">
         <input type="hidden" name="id" value={client.id} />

@@ -1,7 +1,9 @@
 import { ActionForm, SubmitButton } from "@/components/form";
-import { Badge, Button, Card, Field, Input, Notice, PageHeader, SectionTitle, Select, formatDate } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Field, Input, Notice, PageHeader, SectionTitle, Select, formatDate } from "@/components/ui";
 import { openBillingPortal, startCheckout } from "@/lib/actions/billing";
 import { inviteMember, removeMember, revokeInvitation, updateFirm } from "@/lib/actions/firm";
+import { connectNotion, disconnectBigin, disconnectNotion } from "@/lib/actions/integrations";
+import { listConnections } from "@/lib/integrations/store";
 import { ADMIN_ROLES, hasRole, requireWorkspace } from "@/lib/auth";
 import { integrationStatus } from "@/lib/env";
 import { PLANS, planState } from "@/lib/plans";
@@ -16,8 +18,18 @@ const BILLING_MESSAGES: Record<string, { tone: "ok" | "warn" | "bad"; text: stri
   forbidden: { tone: "bad", text: "Only owners and admins can manage billing." },
 };
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ billing?: string }> }) {
-  const { billing } = await searchParams;
+const INTEGRATION_MESSAGES: Record<string, { tone: "ok" | "warn" | "bad"; text: string }> = {
+  connected: { tone: "ok", text: "Zoho Bigin is connected." },
+  disconnected: { tone: "ok", text: "Integration disconnected." },
+  denied: { tone: "warn", text: "Zoho access was not granted. Nothing was connected." },
+  expired: { tone: "bad", text: "The connection attempt expired or was started by another user. Please try again." },
+  failed: { tone: "bad", text: "Zoho Bigin could not be connected. Please try again." },
+  forbidden: { tone: "bad", text: "Only owners and admins can manage integrations." },
+  unavailable: { tone: "bad", text: "Bigin connection is not set up on this server yet." },
+};
+
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ billing?: string; integration?: string }> }) {
+  const { billing, integration } = await searchParams;
   const ws = await requireWorkspace();
   const isAdmin = hasRole(ws, ADMIN_ROLES);
   const [{ data: members }, { data: invitations }] = await Promise.all([
@@ -28,6 +40,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const state = planState(ws.org);
   const integrations = integrationStatus();
   const message = billing ? BILLING_MESSAGES[billing] : undefined;
+  const integrationMessage = integration ? INTEGRATION_MESSAGES[integration] : undefined;
+  const connections = await listConnections(ws.supabase, ws.org.id);
+  const bigin = connections.find((c) => c.provider === "zoho_bigin");
+  const notion = connections.find((c) => c.provider === "notion");
 
   return (
     <>
@@ -113,13 +129,62 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <div id="integrations" />
       <SectionTitle>Integrations</SectionTitle>
+      {integrationMessage && <div className="mb-3"><Notice tone={integrationMessage.tone}>{integrationMessage.text}</Notice></div>}
       <Card className="divide-y divide-line">
-        <IntegrationRow name="AI provider (OpenAI)" status={integrations.ai ? "Connected" : "Not configured"} ok={integrations.ai}
-          detail={integrations.ai ? "Assistants run through OpenAI's API with data retention for this conversation disabled (store: false)." : "Add OPENAI_API_KEY in the hosting settings."} />
+        <IntegrationRow name="AI assistants" status={integrations.ai ? "Connected" : "Not configured"} ok={integrations.ai}
+          detail={integrations.ai ? "Assistants run on OpenAI models with provider-side storage of conversations disabled (store: false)." : "The AI provider is not configured on this server."} />
         <IntegrationRow name="Stripe billing" status={integrations.billing ? "Connected" : "Not configured"} ok={integrations.billing}
-          detail={integrations.billing ? "Checkout, billing portal and webhook are active." : "Needs STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_BASIC and STRIPE_PRICE_PRO."} />
-        <IntegrationRow name="Zoho Bigin (CRM)" status="Not available yet" ok={false} detail="Client sync with Bigin is in the next release." />
-        <IntegrationRow name="Notion (knowledge)" status="Not available yet" ok={false} detail="Linking Notion pages to matters works today via “Link a document”. Full Notion connection is in a later release." />
+          detail={integrations.billing ? "Checkout, billing portal and webhook are active." : "Online payment is being set up."} />
+
+        <div className="px-4 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="font-medium">Zoho Bigin (CRM)</p>
+              <p className="text-sm text-muted">
+                {bigin ? `Connected to ${bigin.account_label ?? "Bigin"} on ${formatDate(bigin.connected_at)}. Sync clients from each client's page, or import Bigin contacts from Clients.`
+                  : integrations.zoho ? "Push clients to Bigin as Contacts or Companies, and import your Bigin contacts as clients."
+                  : "Bigin connection is being set up by Digital Vertise."}
+              </p>
+              {bigin?.status === "error" && bigin.last_error && <p className="mt-1 text-sm text-bad">Last error: {bigin.last_error}</p>}
+            </div>
+            <Badge tone={bigin ? (bigin.status === "connected" ? "ok" : "bad") : "neutral"}>{bigin ? (bigin.status === "connected" ? "Connected" : "Needs attention") : "Not connected"}</Badge>
+          </div>
+          {isAdmin && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {integrations.zoho && <ButtonLink href="/api/integrations/zoho/start" prefetch={false} variant={bigin ? "secondary" : "primary"}>{bigin ? "Reconnect Bigin" : "Connect Bigin"}</ButtonLink>}
+              {bigin && <form action={disconnectBigin}><Button variant="secondary" type="submit">Disconnect</Button></form>}
+            </div>
+          )}
+        </div>
+
+        <div className="px-4 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="font-medium">Notion (knowledge)</p>
+              <p className="text-sm text-muted">
+                {notion ? `Connected to ${notion.account_label ?? "Notion"}. Attach Notion pages to matters; assistants read them as context.`
+                  : "Let assistants read your precedents, playbooks and matter notes in Notion."}
+              </p>
+            </div>
+            <Badge tone={notion ? "ok" : "neutral"}>{notion ? "Connected" : "Not connected"}</Badge>
+          </div>
+          {isAdmin && (notion ? (
+            <form action={disconnectNotion} className="mt-3"><Button variant="secondary" type="submit">Disconnect</Button></form>
+          ) : (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm text-accent">Connect Notion</summary>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted">
+                <li>Open <a className="text-accent underline" href="https://www.notion.so/profile/integrations" target="_blank" rel="noreferrer">notion.so/profile/integrations</a> → <b>New integration</b> → type <b>Internal</b>, name it “LexOS”.</li>
+                <li>Copy the <b>Internal Integration Secret</b> (starts with <code>ntn_</code>) and paste it below.</li>
+                <li>In Notion, on each page or teamspace to share: <b>•••</b> → <b>Connections</b> → add <b>LexOS</b>.</li>
+              </ol>
+              <ActionForm action={connectNotion} className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                <Field label="Integration secret"><Input name="token" type="password" autoComplete="off" required placeholder="ntn_…" /></Field>
+                <SubmitButton pendingLabel="Checking…">Connect</SubmitButton>
+              </ActionForm>
+            </details>
+          ))}
+        </div>
       </Card>
     </>
   );

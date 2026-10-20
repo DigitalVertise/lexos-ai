@@ -4,6 +4,8 @@ import type { Workspace } from "../auth";
 import { aiProvider, AIUnavailableError } from "../ai/provider";
 import { extractText } from "../documents";
 import { canRun, monthStart } from "../entitlements";
+import { notionPageId, type NotionTokens } from "../integrations/notion";
+import { loadConnection } from "../integrations/store";
 import { planState } from "../plans";
 import type { AgentHire, Client, DocumentRow, Matter } from "../types";
 import { catalogAgent } from "./catalog";
@@ -62,7 +64,11 @@ export async function runAssistant(ws: Workspace, input: RunInput): Promise<RunR
         .eq("org_id", ws.org.id).eq("matter_id", matter.id).in("id", input.documentIds).returns<DocumentRow[]>();
       if (!docs || docs.length !== input.documentIds.length) return { ok: false, error: "One or more documents were not found on this matter." };
       const perDoc = Math.floor(MAX_DOC_CHARS_TOTAL / docs.length);
-      for (const d of docs) documents.push({ title: d.title, text: await extractText(db, d, perDoc) });
+      const needsNotion = docs.some((d) => d.source === "link" && d.url && notionPageId(d.url));
+      const notion = needsNotion ? await loadConnection<NotionTokens>(db, ws.org.id, "notion") : null;
+      for (const d of docs) {
+        documents.push({ title: d.title, text: await extractText(db, d, perDoc, { notionToken: notion?.tokens.token }) });
+      }
     }
   }
 

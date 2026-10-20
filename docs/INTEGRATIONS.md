@@ -44,13 +44,29 @@ Test with Stripe test-mode keys first (card `4242 4242 4242 4242`). Expected: af
 **Manual activation** (sales-led deals, no Stripe): in the Supabase SQL editor
 `update organizations set plan = 'pro', subscription_status = 'active' where name = 'Firm name';`
 
-## 4. Zoho Bigin (next release)
+## 4. Zoho Bigin
 
-Not connected yet. Needed from you: a Zoho **Server-based application** at api-console.zoho.com with redirect URI `https://lexos-ai-digitalvertises-projects.vercel.app/api/integrations/zoho/callback`, scopes `ZohoBigin.modules.ALL,ZohoBigin.settings.ALL`, then `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET` and your data centre (`com`, `eu`, …). The database already has the client mapping columns and an encrypted, server-only token table.
+Each firm connects its own Bigin account (Settings → Integrations → **Connect Bigin**, owners/admins). LexOS asks Zoho only for contacts, companies and the organisation name (`ZohoBigin.modules.contacts.ALL,ZohoBigin.modules.accounts.ALL,ZohoBigin.org.READ`).
 
-## 5. Notion (later release)
+What it does:
+- **Send to Bigin / Update in Bigin** on a client: individuals become Contacts, companies become Companies (Accounts). The Bigin record ID is stored on the client so later syncs update the same record.
+- **Import from Bigin** on Clients: brings in up to 1,000 Bigin contacts that are not already linked.
+- Refresh tokens are stored AES-256-GCM encrypted (`INTEGRATIONS_ENCRYPTION_KEY`, bound to the firm), read only through role-checked database functions (migration 0005). Disconnecting revokes the token at Zoho.
 
-Today: Notion pages can be attached to matters with **Link a document**. Full connection (OAuth, page picker, sync) is planned; it needs a Notion **public integration** with redirect URI `…/api/integrations/notion/callback`.
+One-time setup by Digital Vertise (works from a phone browser):
+1. Open https://api-console.zoho.com → **Add Client** → **Server-based Applications**.
+2. Name `LexOS AI`, homepage `https://lexos-ai-digitalvertises-projects.vercel.app`, redirect URI `https://lexos-ai-digitalvertises-projects.vercel.app/api/integrations/zoho/callback`.
+3. Settings tab of the client → enable **Multi-DC** so firms on other Zoho data centres (EU, IN, SA…) can connect.
+4. Add `ZOHO_CLIENT_ID` and `ZOHO_CLIENT_SECRET` (Sensitive) in Vercel → redeploy.
+
+## 5. Notion
+
+Each firm connects its own Notion workspace with an **internal integration** — no LexOS-wide Notion app is needed:
+1. Firm admin opens https://www.notion.so/profile/integrations → **New integration** → Internal, name `LexOS`, copy the secret (`ntn_…`).
+2. LexOS → Settings → Integrations → Connect Notion → paste the secret.
+3. In Notion, share pages/teamspaces with the integration (••• → Connections → LexOS).
+
+Then on any matter: **Attach a Notion page**. Assistants read attached Notion pages (headings, lists, to-dos, tables; two levels of nesting) as context, within the same per-run document limits.
 
 ## Recovery
 
@@ -60,4 +76,6 @@ Today: Notion pages can be attached to matters with **Link a document**. Full co
 | "AI service is not configured" | Add `OPENAI_API_KEY`, redeploy |
 | Choose-package buttons disabled | Add all Stripe variables + service role key, redeploy |
 | Paid but package unchanged | Stripe → Webhooks → the endpoint → check failed deliveries; fix and **Resend** |
+| "LexOS cannot see this page" (Notion) | In Notion: page → ••• → Connections → add the LexOS integration |
+| Bigin shows "Needs attention" | Settings → Integrations → Reconnect Bigin (token revoked or expired) |
 | Rotate a secret | Replace the Vercel variable and redeploy; for Stripe, roll the webhook secret in Stripe first |

@@ -6,6 +6,7 @@ import { isoDaysFromNow } from "@/lib/dates";
 import { requireWorkspace } from "@/lib/auth";
 import { monthStart } from "@/lib/entitlements";
 import { integrationStatus } from "@/lib/env";
+import { listConnections } from "@/lib/integrations/store";
 import { planState } from "@/lib/plans";
 import { matterRef, type AiOutput, type Matter, type Task } from "@/lib/types";
 
@@ -27,6 +28,7 @@ export default async function Dashboard() {
   const matters = (matterList.data ?? []) as Pick<Matter, "id" | "number" | "title" | "status" | "updated_at">[];
   const matterLinks = new Map(matters.map((m) => [m.id, matterRef(m)]));
   const integrations = integrationStatus();
+  const connections = await listConnections(ws.supabase, ws.org.id);
   const name = (ws.user.user_metadata?.full_name as string | undefined)?.split(" ")[0];
 
   return (
@@ -97,8 +99,8 @@ export default async function Dashboard() {
         <span>Package: <b>{state.active ? state.plan.name : "inactive"}</b></span>
         <span>AI service: <b className={integrations.ai ? "text-ok" : "text-warn"}>{integrations.ai ? "Connected" : "Not configured"}</b></span>
         <span>Billing: <b className={integrations.billing ? "text-ok" : "text-warn"}>{integrations.billing ? "Connected" : "Not configured"}</b></span>
-        <span>Zoho Bigin: <b className="text-muted">Next release</b></span>
-        <span>Notion: <b className="text-muted">Next release</b></span>
+        <span>Zoho Bigin: <b className={connections.some((c) => c.provider === "zoho_bigin") ? "text-ok" : "text-muted"}>{connections.some((c) => c.provider === "zoho_bigin") ? "Connected" : "Not connected"}</b></span>
+        <span>Notion: <b className={connections.some((c) => c.provider === "notion") ? "text-ok" : "text-muted"}>{connections.some((c) => c.provider === "notion") ? "Connected" : "Not connected"}</b></span>
       </Card>
     </>
   );

@@ -7,6 +7,8 @@ import { TaskForm } from "@/components/task-form";
 import { TaskList } from "@/components/task-list";
 import { Badge, ButtonLink, Card, Field, Input, PageHeader, SectionTitle, formatDate } from "@/components/ui";
 import { addLink, deleteDocument, setDocumentStatus } from "@/lib/actions/documents";
+import { attachNotionPage } from "@/lib/actions/integrations";
+import { listConnections } from "@/lib/integrations/store";
 import { updateMatter } from "@/lib/actions/matters";
 import { catalogAgent } from "@/lib/agents/catalog";
 import { LAWYER_ROLES, hasRole, requireWorkspace } from "@/lib/auth";
@@ -23,6 +25,7 @@ export default async function MatterPage({ params }: { params: Promise<{ id: str
   const { data: matter } = await ws.supabase.from("matters").select("*").eq("id", id).eq("org_id", ws.org.id).maybeSingle<Matter>();
   if (!matter) notFound();
 
+  const notionConnected = (await listConnections(ws.supabase, ws.org.id)).some((c) => c.provider === "notion" && c.status === "connected");
   const [client, tasks, docs, outputs, hires, clients, members] = await Promise.all([
     ws.supabase.from("clients").select("*").eq("id", matter.client_id).eq("org_id", ws.org.id).maybeSingle<Client>(),
     ws.supabase.from("tasks").select("*").eq("org_id", ws.org.id).eq("matter_id", matter.id).order("status").order("due_at", { nullsFirst: false }),
@@ -105,6 +108,17 @@ export default async function MatterPage({ params }: { params: Promise<{ id: str
             <SubmitButton>Add link</SubmitButton>
           </ActionForm>
         </Card>
+        {notionConnected && (
+          <Card className="p-4 md:col-span-2">
+            <p className="mb-1 text-sm font-medium">Attach a Notion page</p>
+            <p className="mb-3 text-sm text-muted">Assistants read attached Notion pages as context. The page must be shared with your LexOS integration in Notion.</p>
+            <ActionForm action={attachNotionPage} resetOnSuccess className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <input type="hidden" name="matterId" value={matter.id} />
+              <Field label="Notion page link"><Input name="page" type="url" placeholder="https://www.notion.so/…" required /></Field>
+              <SubmitButton pendingLabel="Checking…">Attach</SubmitButton>
+            </ActionForm>
+          </Card>
+        )}
       </div>
 
       <div id="ai" />

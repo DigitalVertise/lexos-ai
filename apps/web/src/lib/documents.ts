@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { notionPageId, pageText } from "./integrations/notion";
 import type { DocumentRow } from "./types";
 
 export const DOCUMENT_BUCKET = "documents";
@@ -37,8 +38,22 @@ export async function signedUrl(supabase: SupabaseClient, path: string, seconds 
   return error ? null : data.signedUrl;
 }
 
-export async function extractText(supabase: SupabaseClient, doc: DocumentRow, maxChars: number): Promise<string> {
-  if (doc.source === "link") return `[Linked document: ${doc.url}. Content not available to the assistant.]`;
+export async function extractText(
+  supabase: SupabaseClient, doc: DocumentRow, maxChars: number, opts: { notionToken?: string } = {},
+): Promise<string> {
+  if (doc.source === "link") {
+    const pageId = doc.url ? notionPageId(doc.url) : null;
+    if (pageId && opts.notionToken) {
+      try {
+        const text = await pageText(opts.notionToken, pageId, maxChars);
+        return text || "[The Notion page is empty.]";
+      } catch {
+        return "[Notion page could not be read. Make sure the page is shared with the firm's LexOS integration in Notion (••• → Connections).]";
+      }
+    }
+    if (pageId) return "[Notion page — connect Notion in Settings → Integrations so assistants can read it.]";
+    return `[Linked document: ${doc.url}. Content not available to the assistant.]`;
+  }
   if (!doc.storage_path) return "[File missing]";
   const { data, error } = await supabase.storage.from(DOCUMENT_BUCKET).download(doc.storage_path);
   if (error || !data) return "[File could not be read]";

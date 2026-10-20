@@ -55,5 +55,8 @@ export const integrationStatus = () => {
     ai: Boolean(e.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY || process.env.VERCEL === "1"),
     billing: Boolean(e.STRIPE_SECRET_KEY && e.STRIPE_WEBHOOK_SECRET && e.STRIPE_PRICE_BASIC && e.STRIPE_PRICE_PRO),
     serviceRole: Boolean(e.SUPABASE_SERVICE_ROLE_KEY),
+    // Bigin needs the LexOS Zoho app credentials plus the token encryption key.
+    zoho: Boolean(process.env.ZOHO_CLIENT_ID && process.env.ZOHO_CLIENT_SECRET && process.env.INTEGRATIONS_ENCRYPTION_KEY),
+    notion: Boolean(process.env.INTEGRATIONS_ENCRYPTION_KEY),
   };
 };
