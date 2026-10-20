@@ -45,7 +45,7 @@
 | Zoho Bigin (per-firm OAuth, client sync, contact import) | ⚠️ Built; connection being tested by owner | Signed OAuth state, least-privilege scopes, encrypted tokens |
 | Notion (firm token, attach pages, assistants read them) | ✅ Connected live by owner | Settings showed "Connected to Moataz Abbasy's Notion" |
 | Migration 0005 (integration storage) | ✅ Applied by owner | Verified: 5 functions, anon cannot execute |
-| Migration 0006 (branding, portal, avatars, chat) | ⏳ Waiting for owner to run | Applies cleanly on local Postgres 16; app degrades gracefully until applied |
+| Migration 0006 (branding, portal, avatars, chat) | ✅ Applied to live DB | Verified: 9 org columns, 3 RLS tables, 8 functions, 4 storage policies; anon can only call portal_brand |
 | Tenant isolation test | ✅ Pass (local Postgres 16, all migrations) | `TENANT_ISOLATION_OK` |
 | Portal isolation test | ✅ Pass (local) | `PORTAL_ISOLATION_OK` — client sees only own matters/shared docs; cannot spoof sender/client; revoke works |
 | Firm branding (website detection, logo, swatches, theme) | ⚠️ Built, unit-tested, not tried live | SSRF-guarded fetch; needs 0006 |
@@ -59,7 +59,7 @@
 
 ## Required actions (owner)
 
-1. Run `lexos_update_0006.sql` in the Supabase SQL editor.
+1. ~~Run migration 0006~~ — done.
 2. Supabase → Authentication → URL Configuration: Site URL `https://lexos-ai-digitalvertises-projects.vercel.app`, and add `https://lexos-ai-digitalvertises-projects.vercel.app/**` to Redirect URLs (password reset and portal sign-in links).
 3. Send: Vercel AI Gateway API key, Supabase session-pooler connection string, Hugging Face read token (for the runtime).
 4. Approve switching the WhatsApp agent on for +44 7378 153633. It will then auto-reply to people who message that number.
