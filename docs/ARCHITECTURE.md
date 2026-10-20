@@ -1,79 +1,87 @@
 # Architecture
 
-## Components (Phase 1)
+LexOS AI has two deployable parts in one repository:
 
-| Component | File | Responsibility |
-|---|---|---|
-| Webhook endpoint | `app/main.py` → `POST /webhooks/bird` | Verify signature, de-duplicate retries, acknowledge fast, process in background |
-| Bird channel | `app/channels/bird.py` | Standard Webhooks verification, payload parsing (DMs and groups), sending text with chunking |
-| Router | `app/router.py` | Find tenant by business number, find/create contact, pick handler |
-| Intake agent | `app/agents/intake.py` | Collect facts with the LLM, create the matter, run the conflict check, alert the team |
-| Team commands | `app/agents/commands.py` | `/conflict /leads /matter /accept /decline /mute /unmute /time /hours /draft /help` |
-| Conflict check | `app/conflicts.py` | Normalised fuzzy name matching across contacts and adverse parties |
-| CRM adapter | `app/crm.py` | `LocalCRM` (default) or `BiginCRM` |
-| LLM wrapper | `app/llm.py` | LiteLLM, so the provider is a config value |
-| Data model | `app/models.py` | `tenants, contacts, matters, time_entries, messages, intake_sessions, webhook_events` |
-| Dashboard | `/dashboard` | Read-only, password-protected, mobile-first |
+| Part | Path | Runs on | Purpose |
+|---|---|---|---|
+| **Web app** | `apps/web` | Vercel (serverless) | The SaaS: firms, AI legal assistants, clients, matters, tasks, documents, billing |
+| **WhatsApp service** | `apps/api` | Separate container host (e.g. Railway) | WhatsApp intake agent and team commands over Bird — see [WHATSAPP.md](WHATSAPP.md) |
 
-## Message flow
+Shared infrastructure: **Supabase** (Postgres with row-level security, Auth, private Storage), **OpenAI** (Responses API), **Stripe** (subscriptions).
 
-1. Bird posts `whatsapp.received` to `/webhooks/bird`.
-2. The signature is verified (`webhook-id.webhook-timestamp.body`, HMAC-SHA256); deliveries older than 5 minutes are rejected.
-3. The `webhook-id` is stored; a retry with the same ID returns `duplicate` without reprocessing.
-4. The endpoint returns 200 immediately; processing runs as a background task.
-5. The router resolves the tenant from `data.to.phone_number`, and group vs. DM from `data.to.group_id`.
-6. The handler replies through Bird and every inbound/outbound message is logged.
+```
+Browser ──► Vercel (Next.js 16, App Router)
+              ├─ proxy.ts: refresh session, redirect anonymous users
+              ├─ Server Components / Server Actions  ──► Supabase as the signed-in user (RLS)
+              ├─ /api/documents/:id/download          ──► short-lived signed URL (private bucket)
+              ├─ /api/stripe/webhook                   ──► Supabase service role (billing columns only)
+              └─ AI assistants (lib/agents)            ──► OpenAI Responses API (store: false)
+Browser ──► Supabase Storage (direct upload, storage RLS: own firm's folder only)
+```
 
-## Architecture decisions
+## Decision log
 
-### ADR-001: Official WhatsApp API through Bird, not Baileys/Evolution API
+### ADR-008: Supabase instead of "no SQL / Notion as database"
+- **Problem**: the original brief excluded SQL databases and proposed Notion/Bigin as data stores.
+- **Options**: Notion as DB · Clerk + Upstash Redis · Supabase Postgres.
+- **Decision**: Supabase (agreed with the product owner on 2026-10-20).
+- **Rationale**: Notion's ~3 requests/second shared limit, lack of transactions and lack of per-firm access control make it unsafe for confidential multi-firm legal data. Supabase provides auth, database-enforced tenant isolation (RLS), private file storage and signed URLs in one managed, serverless-friendly service.
+- **Tradeoffs**: one more vendor; schema migrations must be managed (`supabase/migrations`).
 
-- **Problem**: the firm must keep its existing number, and the original blueprint used Baileys/Evolution API (an unofficial WhatsApp Web client).
-- **Options**: Baileys/Evolution API · Meta Cloud API directly · Twilio · Bird.
-- **Decision**: Bird.
-- **Rationale**: unofficial clients violate WhatsApp's terms and get numbers banned; for a law firm that is losing its main client line. Bird is official, supports coexistence (the firm keeps using the WhatsApp Business app on the same number), supports groups, and is already connected for Digital Vertise's number.
-- **Tradeoffs**: per-conversation cost; free-form replies only inside the 24-hour customer-service window (templates needed for outbound follow-ups, planned for Phase 2).
+### ADR-009: Tenant isolation enforced in the database
+- Every business row has `org_id`; every table has RLS; policies call `is_member(org_id)` / `has_role(org_id, roles)`.
+- Composite foreign keys `(id, org_id)` make it impossible to link a matter to another firm's client, or a document/task/AI output to another firm's matter.
+- Users cannot write billing columns (`plan`, `subscription_status`, Stripe IDs): column privileges are revoked; only the service role (Stripe webhook) can.
+- Organizations and memberships are created only via `create_organization()` / `accept_invitation()` (SECURITY DEFINER, validated).
+- The current firm comes from the user's own memberships; the firm cookie is only a preference and is ignored if the user isn't a member.
+- Application code additionally filters by `org_id` on every query (defence in depth).
 
-### ADR-002: One FastAPI service, not a monorepo of four services
+### ADR-010: AI assistants as a catalogue of roles
+- Assistants are defined in code (`lib/agents/catalog.ts`): 4 Basic, 4 Pro, plus Pro custom assistants. A firm "hires" one by creating an `agent_hires` row.
+- Each run is one Responses API call: shared safety rules → role brief → firm instructions → matter context → documents wrapped in `<document>` tags → the lawyer's request. Document text cannot close its wrapper, and the rules state document text is never instructions.
+- Outputs are saved to `ai_outputs` with token usage; the Deadline Planner returns JSON that the server re-parses from the saved output before creating tasks (never trusting the browser).
+- `store: false` is sent so OpenAI does not retain the conversation for retrieval.
 
-- **Problem**: the blueprint proposed separate web, API, WhatsApp-bridge and AI-engine services from day one.
-- **Decision**: one Python service for Phase 1, organised in modules that can be split later (`channels/`, `agents/`, `crm.py`).
-- **Rationale**: one deployment, one log stream, cheapest hosting, fastest iteration. Nothing in Phase 1 needs independent scaling.
-- **Tradeoffs**: the dashboard is server-rendered and basic; a Next.js app comes in Phase 2 when the portal needs interactivity.
+### ADR-011: Package limits enforced on the server
+- `lib/entitlements.ts` decides hiring, monthly assistant tasks, per-user rate limit (6/minute) and seats, using counts from the database. The UI shows the same decisions but is not trusted.
 
-### ADR-003: LiteLLM with a cheap default model, a stronger model only for drafting
+### ADR-012: Documents
+- Files go straight from the browser to the private `documents` bucket under `{org_id}/{document_id}/{name}`; storage RLS allows only members of that org. The server then verifies the object exists and records it.
+- Downloads go through `/api/documents/:id/download`, which authorises via RLS and issues a 60-second signed URL.
+- Text is extracted server-side for AI use (PDF via unpdf, DOCX via mammoth), capped at 60,000 characters per run.
 
-- **Decision**: `LLM_MODEL` (intake, fast and cheap) and `LLM_DRAFT_MODEL` (drafting only). Any LiteLLM provider string works, including OpenRouter and local Ollama.
-- **Rationale**: intake turns are short and frequent; drafting is rare and quality-sensitive. Switching providers is an environment change.
-- **Tradeoffs**: no provider-native features (e.g. prompt caching) in Phase 1.
+### ADR-013: Billing
+- Stripe Checkout (subscription) + Billing Portal. Prices come from `STRIPE_PRICE_BASIC` / `STRIPE_PRICE_PRO`.
+- The webhook verifies the signature, records the event ID first (`stripe_events`) for idempotency, re-fetches the subscription to avoid out-of-order states, checks the customer matches the org, then updates the org. On failure the event record is removed so Stripe's retry is processed.
+- New firms get a 14-day trial of the Basic package.
 
-### ADR-004: Structured JSON turns instead of an agent framework
+## Data model (system of record)
 
-- **Problem**: the blueprint used both LangChain and AutoGen.
-- **Decision**: each intake turn is one LLM call returning `{reply, fields, complete}`. The server, not the model, decides completion, creates records and runs the conflict check.
-- **Rationale**: predictable, testable, cheap (one call per message), and the model never controls side effects such as revealing conflicts. LangGraph is the candidate when multi-step tool use is needed (Phase 2).
+| Entity | Table | Source of truth | Notes |
+|---|---|---|---|
+| Users | `auth.users` | Supabase Auth | Passwords never handled by LexOS |
+| Firms | `organizations` | LexOS | Billing columns written only by the Stripe webhook |
+| Memberships / roles | `memberships` | LexOS | owner, admin, lawyer, staff |
+| Invitations | `invitations` | LexOS | Accepted only by a verified account with the invited email |
+| Clients | `clients` | LexOS (mirrored to Bigin in a later release) | `crm_id` / `crm_sync_status` reserved for Bigin |
+| Matters | `matters` | LexOS | Number assigned by the database per firm |
+| Tasks | `tasks` | LexOS | Stored in UTC, shown in Dubai time |
+| Documents | `documents` + Storage | LexOS | Uploads private; links (e.g. Notion pages) as URLs |
+| AI assistants | `agent_hires` | LexOS | |
+| AI outputs and usage | `ai_outputs` | LexOS | Request + output + tokens; no full prompt stored |
+| Audit log | `audit_events` | LexOS | Append-only; identifiers only, never content |
+| Integration tokens | `integration_connections` | LexOS (server-only) | For Bigin/Notion releases; no user access |
+| Stripe events | `stripe_events` | LexOS (server-only) | Idempotency |
 
-### ADR-005: LexOS database is the source of truth; CRM is a mirror
+**Deletion and offboarding**: deleting an organization cascades to all of its rows. Clients with matters cannot be deleted. Disconnecting a future integration will never delete LexOS data.
 
-- **Decision**: all records live in LexOS Postgres; `CRM_BACKEND=bigin` mirrors contacts and matters into Zoho Bigin.
-- **Rationale**: the conflict check must search all history fast and reliably; a CRM outage must not stop intake; the firm must never see the CRM brand; another CRM is a new adapter.
-- **Tradeoffs**: one-way sync in Phase 1 (edits made in Bigin do not flow back).
+## Security controls
 
-### ADR-006: Multi-tenant from day one, application-level filtering first
-
-- **Decision**: every table has `tenant_id`; the tenant is resolved from the WhatsApp business number. Postgres row-level security is added in Phase 2.
-- **Rationale**: the product is sold as SaaS ($299+/month per firm); one deployment serves many firms.
-
-### ADR-007: Schema created at startup (no migrations yet)
-
-- **Decision**: `create_all()` at startup while the schema is young.
-- **Tradeoffs**: column changes on a live database need Alembic. Adding Alembic is the first task of Phase 2, before any paying firm is onboarded.
-
-## Security and confidentiality
-
-- Webhook signatures are mandatory in production (startup fails without the secret).
-- Dashboard and admin API are token-protected; production startup fails without the tokens.
-- Message bodies are not written to application logs.
-- Conflict matches are sent only to the internal team group, never to the prospect.
-- The intake prompt forbids legal advice, outcome predictions and fee quotes.
-- Known Phase 1 gaps (tracked in the roadmap): any member of the team group can run commands; no per-user dashboard accounts; no encryption at rest beyond the database provider's.
+- Authentication: Supabase Auth (email + password, email confirmation, password reset).
+- Authorization: Postgres RLS + role checks in server actions.
+- Secrets: server-only env vars; `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, Stripe keys never reach the browser.
+- Headers: HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy.
+- Server Actions provide built-in CSRF protection (Origin check).
+- Input validation with zod at every action boundary; React escapes output.
+- Logs contain error names/codes only — never prompts, documents or tokens.
+- Not yet in place (see PROJECT_STATUS.md): MFA, content-security-policy, malware scanning of uploads, formal compliance review.

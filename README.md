@@ -1,88 +1,56 @@
 # LexOS AI
 
-AI operating system for law firms, starting with the channel firms in the UAE
-actually live on: **WhatsApp**.
+Legal practice SaaS for law firms in the UAE and beyond, built around an **AI legal team**: firms hire AI assistants for intake, drafting, client communications, billing, contract review, litigation support, research and deadline planning — working inside a private, per-firm workspace of clients, matters, tasks and documents.
 
-**Phase 1 (this release)** gives a firm an AI intake assistant on its existing
-WhatsApp number, automatic conflict screening, and a team WhatsApp group that
-works as a command line for the firm.
+**Production:** https://lexos-ai-digitalvertises-projects.vercel.app
 
-| For | What it does |
-|---|---|
-| New prospects | Bilingual (English/Arabic) intake on WhatsApp: name, matter type, facts, other side, urgency. Never gives legal advice. |
-| The firm | Each completed intake becomes a matter (`M-1`, `M-2`…), screened against every client, lead and adverse party on file. The team group gets a summary with any conflict matches. The prospect never sees conflict results. |
-| Lawyers in the team group | `/conflict`, `/leads`, `/matter`, `/accept`, `/decline`, `/mute`, `/time`, `/hours`, `/draft`, `/help` |
-| Partners | Mobile-friendly dashboard at `/dashboard`: matters, conflicts, time, WhatsApp activity |
-| CRM | Optional mirror into Zoho Bigin (contacts, notes, pipeline records). The firm never sees the Bigin brand. |
+## Packages
 
-## How it works
+| | Basic · $299/mo | Pro · $699/mo |
+|---|---|---|
+| AI assistants | 4 (Intake & KYC, Drafting, Client Communications, Billing & Time) | All 8 (+ Contract Review, Litigation Paralegal, Legal Research, Deadline Planner) |
+| Custom assistants | — | Up to 5 |
+| Assistant tasks / month | 400 | 2,000 |
+| Team members | 5 | 25 |
+
+New firms get a 14-day trial of Basic. Limits are enforced on the server (`apps/web/src/lib/entitlements.ts`).
+
+## Repository
 
 ```
-Client / team on WhatsApp
-        │
-        ▼
-Bird (official WhatsApp Business API, keeps the firm's existing number)
-        │  signed webhook: whatsapp.received
-        ▼
-LexOS API (FastAPI)
-  ├─ router ── team group "/..." ──► commands (conflict, time, draft…)
-  │        ├─ new contact ────────► intake agent (LLM via LiteLLM)
-  │        └─ existing client ────► acknowledge + notify team
-  ├─ conflict check (Arabic/English-aware name matching)
-  ├─ Postgres (multi-tenant: one deployment, many firms)
-  └─ CRM adapter ──► Bigin (optional)
+apps/web/        Next.js 16 SaaS (Vercel): auth, firms, AI team, clients, matters, tasks, documents, billing
+apps/api/        WhatsApp intake service (Python, Bird) — optional, deployed separately
+supabase/        Database migrations and the tenant-isolation test
+docs/            ARCHITECTURE, PROJECT_STATUS, INTEGRATIONS, WHATSAPP, ROADMAP
 ```
 
-Details and the reasoning behind each choice: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-What comes next: [docs/ROADMAP.md](docs/ROADMAP.md).
+## Setup
 
-## Deploy (no computer needed)
+- Configure services: **[docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)** (Supabase, OpenAI, Stripe; Bigin and Notion later).
+- How it's built and why: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+- Current state, test evidence and open items: **[docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)**.
 
-Full step-by-step, written to be done from a phone: **[docs/DEPLOY.md](docs/DEPLOY.md)**.
-
-Short version:
-1. Create a Postgres database (Railway or Supabase).
-2. Deploy `apps/api` (Dockerfile included) to Railway or Render.
-3. Paste the variables from [`.env.example`](.env.example).
-4. In Bird, create a webhook for `whatsapp.received` pointing at
-   `https://<your-app>/webhooks/bird` and copy its signing secret into `BIRD_WEBHOOK_SECRET`.
-5. Message the firm's number from another phone.
-
-## Run locally
+### Local development
 
 ```bash
-cp .env.example .env          # set ENVIRONMENT=development for local runs
-docker compose up --build     # API on http://localhost:8000
+cd apps/web
+cp .env.example .env.local   # fill in values
+npm install
+npm run dev                  # http://localhost:3000
+npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-Without `BIRD_API_KEY`, replies are logged instead of sent ("dry run").
+Database changes: add a numbered file to `supabase/migrations/` and apply it to the Supabase project.
 
-Tests:
+### Deployments and rollback
 
-```bash
-cd apps/api
-pip install -r requirements-dev.txt
-pytest
-```
-
-## Repository layout
-
-```
-apps/api/            FastAPI service (webhook, agents, dashboard)
-  app/channels/      Bird WhatsApp client + webhook verification
-  app/agents/        intake agent, team commands
-  app/conflicts.py   conflict-of-interest screening
-  app/crm.py         CRM adapters (local, Bigin)
-  tests/             end-to-end tests with a fake LLM and fake WhatsApp
-docs/                architecture decisions, roadmap, deployment guide
-```
+Vercel builds `apps/web` on every push: `main` → production, other branches → protected previews.
+Rollback: Vercel → lexos-ai → Deployments → previous production deployment → **Promote to Production** (instant; database migrations are additive).
 
 ## Important
 
-LexOS is a tool for lawyers, not a lawyer. The intake assistant is instructed
-never to give legal advice, conflict screening is an aid that must be reviewed
-by a lawyer, and every `/draft` output is marked for lawyer review.
+LexOS assists lawyers; it does not give legal advice. Assistant output is labelled as a draft for professional review, assistants are instructed never to invent legal authorities, and deadlines entered or suggested in the app are not verified court deadlines.
 
-This repository is public: keep real keys, client data and firm names out of it.
+This repository is public: never commit keys, client data or documents.
 
 MIT License.

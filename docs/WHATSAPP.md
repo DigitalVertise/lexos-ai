@@ -1,4 +1,11 @@
-# Deploying LexOS (from a phone)
+# WhatsApp service (apps/api)
+
+The WhatsApp intake agent and team commands run as a separate Python service.
+It is optional and independent of the web app. Its design decisions (ADR-001 to ADR-007: Bird instead of
+unofficial WhatsApp clients, structured LLM turns, conflict screening) are in commit `9ad0f04`'s
+`docs/ARCHITECTURE.md`.
+
+Deploying it (from a phone):
 
 Everything below can be done in mobile browsers. Estimated time: 20–30 minutes.
 
