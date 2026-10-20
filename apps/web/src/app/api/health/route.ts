@@ -38,5 +38,22 @@ export async function GET(request: NextRequest) {
       body.aiCheck = { ok: false, error: (err as Error).name, message: (err as Error).message.slice(0, 200) };
     }
   }
+  if (request.nextUrl.searchParams.get("models") === "1" && aiRoute() === "vercel-ai-gateway"
+      && tokenOk(request.headers.get("x-health-token") ?? request.nextUrl.searchParams.get("token"))) {
+    try {
+      const { getVercelOidcToken } = await import("@vercel/oidc");
+      const key = process.env.AI_GATEWAY_API_KEY ?? (await getVercelOidcToken());
+      const res = await fetch("https://ai-gateway.vercel.sh/v1/models?include_availability", {
+        headers: { Authorization: `Bearer ${key}` },
+        cache: "no-store",
+      });
+      const json = (await res.json()) as { data?: { id: string; type?: string; model_eligibility?: { status?: string } }[] };
+      body.eligibleModels = (json.data ?? [])
+        .filter((m) => m.model_eligibility?.status === "eligible" && (m.type ?? "language") === "language")
+        .map((m) => m.id);
+    } catch (err) {
+      body.eligibleModels = { error: (err as Error).name };
+    }
+  }
   return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
 }
