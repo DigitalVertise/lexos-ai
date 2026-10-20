@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ tenant.name if tenant else "LexOS" }} · LexOS{% endblock %}
+{% block header %}
+  {% if tenants|length > 1 %}
+  <form method="get"><select name="tenant" onchange="this.form.submit()">
+    {% for t in tenants %}<option value="{{ t.slug }}" {% if tenant and t.id == tenant.id %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+  </select></form>
+  {% elif tenant %}<div class="muted">{{ tenant.name }}</div>{% endif %}
+{% endblock %}
+{% block content %}
+{% if not tenant %}
+  <div class="empty">No firm set up yet. Set the DEFAULT_TENANT_* variables or call PUT /admin/tenants.</div>
+{% else %}
+  <div class="stats">
+    <div class="stat"><b>{{ stats.leads }}</b><small>Leads</small></div>
+    <div class="stat"><b>{{ stats.clients }}</b><small>Clients</small></div>
+    <div class="stat"><b>{{ stats.conflicts }}</b><small>Conflict reviews</small></div>
+    <div class="stat"><b>{{ (stats.minutes / 60)|round(1) }}h</b><small>Time logged</small></div>
+  </div>
+
+  <h2>Matters</h2>
+  {% for m in matters %}
+  <div class="card">
+    <div class="row">
+      <div><span class="ref">{{ m.ref }}</span> {{ m.title }}</div>
+      <div>
+        {% if m.urgency == "urgent" %}<span class="pill bad">urgent</span>{% endif %}
+        {% if m.conflict_hits %}<span class="pill warn">{{ m.conflict_hits|length }} conflict match{{ "es" if m.conflict_hits|length > 1 }}</span>{% endif %}
+        <span class="pill {{ 'ok' if m.status == 'open' else '' }}">{{ m.status }}</span>
+      </div>
+    </div>
+    <div class="muted">
+      {{ m.client.name if m.client else "-" }} · other side: {{ m.adverse_parties|join(", ") or "none given" }}
+      · {{ m.created_at.strftime("%d %b %Y") }}
+    </div>
+    {% if m.summary %}<div class="msg" style="margin-top:6px">{{ m.summary }}</div>{% endif %}
+    {% if m.conflict_hits %}
+    <div class="muted" style="margin-top:6px">
+      {% for h in m.conflict_hits[:5] %}⚠️ {{ h.name }} — {{ h.source }} ({{ (h.score * 100)|int }}%)<br>{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% else %}<div class="empty">No matters yet. They appear here when the WhatsApp intake completes.</div>{% endfor %}
+
+  <h2>Time entries</h2>
+  {% for e in time_entries %}
+  <div class="card row">
+    <div>{{ e.minutes|dur }}
+      {% if e.matter %}<span class="ref">{{ e.matter.ref }}</span>{% endif %} {{ e.description }}</div>
+    <div class="muted">{{ e.author.name or e.author.phone if e.author else "" }} · {{ e.created_at.strftime("%d %b %H:%M") }}</div>
+  </div>
+  {% else %}<div class="empty">No time logged. Use /time in the team group.</div>{% endfor %}
+
+  <h2>Recent WhatsApp activity</h2>
+  {% for msg in messages %}
+  {% set c = contacts.get(msg.contact_id) %}
+  <div class="card">
+    <div class="row">
+      <div><b>{{ "→" if msg.direction == "outbound" else "←" }}</b>
+        {% if msg.group_id %}team group{% elif c %}{{ c.name or c.phone or c.bsuid }}{% endif %}
+        {% if c and c.kind != "lead" %}<span class="pill">{{ c.kind }}</span>{% endif %}</div>
+      <div class="muted">{{ msg.created_at.strftime("%d %b %H:%M") }}</div>
+    </div>
+    <div class="msg">{{ msg.body[:600] }}</div>
+  </div>
+  {% else %}<div class="empty">No messages yet.</div>{% endfor %}
+{% endif %}
+{% endblock %}

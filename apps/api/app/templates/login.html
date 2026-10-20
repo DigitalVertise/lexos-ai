@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Sign in · LexOS{% endblock %}
+{% block content %}
+<form method="post" action="/login" class="card" style="max-width:360px;margin:15vh auto;display:grid;gap:12px">
+  <div><b>Team dashboard</b><div class="muted">Enter the dashboard password.</div></div>
+  <input type="password" name="password" placeholder="Password" autocomplete="current-password" required>
+  {% if error %}<div class="pill bad">Wrong password</div>{% endif %}
+  <button type="submit">Sign in</button>
+</form>
+{% endblock %}
