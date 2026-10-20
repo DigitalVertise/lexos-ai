@@ -46,10 +46,28 @@ def require_runtime(authorization: str = Header(default="")) -> None:
 # Capabilities
 # --------------------------------------------------------------------------
 
+_hf_check: dict = {}
+
+
+def _hf_status(token: str) -> str:
+    """'valid' / 'invalid' / 'unknown' — checked once per process (no user data)."""
+    if token in _hf_check:
+        return _hf_check[token]
+    try:
+        import httpx
+
+        r = httpx.get("https://huggingface.co/api/whoami-v2", headers={"Authorization": f"Bearer {token}"}, timeout=8)
+        _hf_check[token] = "valid" if r.status_code == 200 else "invalid" if r.status_code in (401, 403) else "unknown"
+    except Exception:
+        return "unknown"
+    return _hf_check[token]
+
+
 @router.get("/capabilities", dependencies=[Depends(require_runtime)])
 def capabilities() -> dict:
     s = get_settings()
     return {
+        "hf_token": _hf_status(s.hf_token) if s.hf_token else "missing",
         "chat": True,
         "model": s.agent_model,
         "tts": True,
