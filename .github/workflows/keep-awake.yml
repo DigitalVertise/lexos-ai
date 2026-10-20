@@ -1,0 +1,19 @@
+name: Keep agent runtime awake
+
+# Render's free plan sleeps after 15 minutes without traffic; a sleeping
+# service takes ~50 s to answer the first WhatsApp message. A light ping every
+# 10 minutes keeps it responsive (well inside the free 750 instance-hours).
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /health
+        run: curl -fsS --max-time 90 --retry 2 https://lexos-ai-api.onrender.com/health || echo "runtime did not answer (will retry next run)"
