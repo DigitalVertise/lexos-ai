@@ -50,9 +50,25 @@ def test_parse_ignores_other_events():
 def test_parse_media_uses_caption():
     evt = event("x")
     del evt["data"]["text"]
-    evt["data"]["document"] = {"caption": "my contract"}
+    evt["data"]["document"] = {"id": "waf_1", "url": "https://us1.platform.bird.com/v1/whatsapp/messages/wam_x/media/waf_1",
+                               "mime_type": "application/pdf", "filename": "lease.pdf", "caption": "my contract"}
     msg = parse_received(evt)
-    assert msg.kind == "media" and msg.text == "my contract"
+    assert msg.kind == "document" and msg.is_media
+    assert msg.text == "[document: lease.pdf] my contract"
+    assert msg.media_filename == "lease.pdf" and msg.media_mime == "application/pdf" and msg.media_id == "waf_1"
+
+
+def test_parse_voice_note_and_image():
+    evt = event("x")
+    del evt["data"]["text"]
+    evt["data"]["audio"] = {"id": "waf_2", "url": "https://us1.platform.bird.com/m", "mime_type": "audio/ogg; codecs=opus", "voice": True}
+    msg = parse_received(evt)
+    assert msg.kind == "audio" and msg.voice and msg.text == "[voice note]"
+    evt2 = event("x")
+    del evt2["data"]["text"]
+    evt2["data"]["image"] = {"id": "waf_3", "url": "https://us1.platform.bird.com/i", "mime_type": "image/jpeg"}
+    img = parse_received(evt2)
+    assert img.kind == "image" and img.text == "[image]" and img.caption is None
 
 
 def test_chunk_text_respects_limit():

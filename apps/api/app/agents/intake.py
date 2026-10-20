@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
-from .. import conflicts
+from .. import conflicts, lexos_bridge
 from ..context import Ctx
 from ..llm import parse_json
 from ..models import IntakeSession, Matter, Message
@@ -46,6 +46,9 @@ Rules:
   lawyer will advise them after reviewing the details.
 - Never promise the firm will take the case.
 - If something sounds urgent, say a lawyer will be alerted right away.
+- Messages like "[document: name.pdf]", "[image]" or "[voice note] ..." mean the person
+  sent a file, photo or voice note. Thank them for it, say a lawyer will review it,
+  and never claim to have read a file's contents.
 - When you have everything, thank them and say a lawyer will contact them
   ({office_hours}). Set complete to true.
 
@@ -132,7 +135,7 @@ def handle(ctx: Ctx) -> None:
         fields = _merge(intake.fields, result.get("fields") or {})
     except Exception:
         log.exception("Intake LLM call failed")
-        lang = (intake.fields or {}).get("language", "en")
+        lang = ctx.sender.language or (intake.fields or {}).get("language", "en")
         ctx.reply(FALLBACK_REPLY.get(lang, FALLBACK_REPLY["en"]))
         ctx.notify_team(
             f"⚠️ New WhatsApp message from {ctx.sender.name or ctx.msg.sender_key} "
@@ -189,6 +192,8 @@ def _complete(ctx: Ctx, intake: IntakeSession) -> None:
 
     contact.crm_id = contact.crm_id or ctx.crm.sync_contact(contact)
     matter.crm_id = ctx.crm.sync_matter(matter, contact)
+    # Mirror into the LexOS web app (and the firm's Bigin/Notion). Never blocks the reply.
+    lexos_bridge.mirror_intake(ctx.session, ctx.tenant, contact, matter)
 
     ctx.notify_team(_team_summary(matter, contact, hits))
 
@@ -209,8 +214,11 @@ def _team_summary(matter: Matter, contact, hits) -> str:
             lines.append(f"• {h.name} — {h.source} ({int(h.score * 100)}%)")
     else:
         lines.append("✅ No conflict matches found (screening only).")
+    if matter.lexos_matter_number:
+        lines.append(f"📁 In LexOS as matter M-{matter.lexos_matter_number}")
     lines.append("")
     lines.append(f"Log time: /time 15m {matter.ref} intake review")
+    lines.append(f"Reply to the client: /reply {matter.ref} <message>")
     return "\n".join(lines)
 
 

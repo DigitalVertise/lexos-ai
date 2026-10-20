@@ -21,6 +21,7 @@ from .channels.bird import BirdClient, Messenger, NullMessenger, SignatureError,
 from .config import Settings, get_settings
 from .crm import CRM, build_crm
 from .llm import LLM, LiteLLM
+from .media import build_transcriber
 from .models import Contact, Matter, Message, Tenant, TimeEntry, WebhookEvent
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -42,7 +43,8 @@ services = Services()
 
 
 def configure(settings: Settings) -> None:
-    db.init_engine(settings.database_url)
+    # Linked to LexOS: share its Supabase database (WhatsApp tables in schema "wa").
+    db.init_engine(settings.lexos_database_url or settings.database_url)
     db.create_all()
     services.messenger = (
         BirdClient(settings.bird_api_key, settings.resolved_bird_api_base)
@@ -50,6 +52,7 @@ def configure(settings: Settings) -> None:
     )
     services.llm = LiteLLM(settings)
     services.crm = build_crm(settings)
+    services.transcribe = build_transcriber(settings)  # type: ignore[attr-defined]
     with db.session_scope() as session:
         tenants.bootstrap_from_env(session, settings)
 
@@ -97,6 +100,7 @@ def _process_event(event: dict) -> None:
             outcome = router.handle_inbound(
                 session, msg, messenger=services.messenger, llm=services.llm,
                 crm=services.crm, draft_model=settings.llm_draft_model,
+                transcribe=getattr(services, "transcribe", None),
             )
         log.info("Handled %s from %s: %s", msg.provider_id, "group" if msg.group_id else "dm", outcome)
     except Exception:

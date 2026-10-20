@@ -10,3 +10,4 @@ litellm>=1.50
 edge-tts>=7.0
 gradio_client>=1.4
 huggingface_hub>=0.25
+cryptography>=43

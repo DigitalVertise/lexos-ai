@@ -1,6 +1,8 @@
 """Multi-tenant data model.
 
-Every business table carries ``tenant_id``. Application code always filters by
+Every business table carries ``tenant_id``. On Postgres the tables live in
+schema ``wa`` (see db.py) so they never collide with the LexOS web app's
+``public`` tables in a shared Supabase database. Application code always filters by
 tenant; Postgres row-level security is added on top in Phase 2 (see
 docs/ROADMAP.md).
 """
@@ -57,6 +59,8 @@ class Contact(Base):
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     language: Mapped[str | None] = mapped_column(String(8), nullable=True)  # en | ar
     crm_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # public.clients.id in the LexOS database, when the bridge is enabled.
+    lexos_client_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     # When true the AI stays silent with this contact (a lawyer has taken over).
     bot_muted: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -82,6 +86,9 @@ class Matter(Base):
     adverse_parties: Mapped[list] = mapped_column(JSON, default=list)
     conflict_hits: Mapped[list] = mapped_column(JSON, default=list)
     crm_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # public.matters.id / number in the LexOS database, when the bridge is enabled.
+    lexos_matter_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lexos_matter_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     client: Mapped[Contact | None] = relationship()
@@ -120,6 +127,11 @@ class Message(Base):
     direction: Mapped[str] = mapped_column(String(8))  # inbound | outbound
     body: Mapped[str] = mapped_column(Text, default="")
     provider_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # Inbound media metadata (the bytes stay at Bird for 30 days).
+    media_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    media_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_mime: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    media_filename: Mapped[str | None] = mapped_column(String(300), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 

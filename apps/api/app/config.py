@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     # service stores its own tables in schema "wa" there and mirrors intakes
     # into LexOS. Falls back to database_url.
     lexos_database_url: str = ""
+    integrations_encryption_key: str = ""
 
     # --- CRM ----------------------------------------------------------------
     crm_backend: str = "local"  # local | bigin

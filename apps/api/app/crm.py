@@ -135,6 +135,11 @@ class BiginCRM:
 
 
 def build_crm(settings: Settings) -> CRM:
+    if settings.lexos_database_url:
+        # Linked to LexOS: each firm's own Bigin connection (made in the LexOS web
+        # app) is used by lexos_bridge on intake completion, so the legacy
+        # single-account env refresh token is not used.
+        return LocalCRM()
     if settings.crm_backend == "bigin":
         if not (settings.zoho_client_id and settings.zoho_refresh_token):
             log.warning("CRM_BACKEND=bigin but Zoho credentials are missing; using local CRM")

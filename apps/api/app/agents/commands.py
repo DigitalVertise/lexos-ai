@@ -7,11 +7,11 @@ import logging
 import re
 from collections.abc import Callable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from .. import conflicts
 from ..context import Ctx
-from ..models import Matter, TimeEntry
+from ..models import Matter, Message, TimeEntry
 
 log = logging.getLogger(__name__)
 
@@ -19,6 +19,8 @@ HELP = """*LexOS commands*
 /conflict <name> – screen a person or company
 /leads – latest intakes
 /matter M-12 – matter details
+/client M-12 – client card (contact, language, last message)
+/reply M-12 <message> – reply to the client from the firm's number (AI pauses)
 /accept M-12 – open the matter, lead becomes client
 /decline M-12 – decline the matter
 /mute M-12 – AI stops replying to that client (you take over)
@@ -120,6 +122,59 @@ def cmd_matter(ctx: Ctx, args: str) -> None:
         lines.append("Conflict matches: " + "; ".join(
             f"{h['name']} ({h['source']})" for h in matter.conflict_hits[:5]))
     ctx.reply("\n".join(lines))
+
+
+def cmd_client(ctx: Ctx, args: str) -> None:
+    matter = _matter_or_reply(ctx, args.strip())
+    if not matter:
+        return
+    client = matter.client
+    if client is None:
+        ctx.reply(f"{matter.ref} has no client attached.")
+        return
+    last_in = ctx.session.scalar(
+        select(func.max(Message.created_at)).where(
+            Message.tenant_id == ctx.tenant.id, Message.contact_id == client.id,
+            Message.direction == "inbound"))
+    files = ctx.session.scalar(
+        select(func.count()).select_from(Message).where(
+            Message.tenant_id == ctx.tenant.id, Message.contact_id == client.id,
+            Message.media_kind.is_not(None)))
+    open_matters = ctx.session.scalars(
+        select(Matter).where(Matter.tenant_id == ctx.tenant.id, Matter.client_id == client.id)
+        .order_by(Matter.number)).all()
+    lines = [
+        f"*{client.name or 'Unnamed'}* ({client.kind})",
+        f"Phone: {client.phone or client.bsuid or '-'} · Email: {client.email or '-'}",
+        f"Language: {client.language or '-'} · AI: {'paused' if client.bot_muted else 'active'}",
+        f"Last message: {last_in.strftime('%Y-%m-%d %H:%M UTC') if last_in else '-'}"
+        + ("" if ctx.window_open(client) else " (24h window closed: replies use the follow-up template)"),
+        f"Files received: {files or 0}",
+        "Matters: " + ", ".join(f"{m.ref} ({m.status})" for m in open_matters),
+    ]
+    if client.lexos_client_id:
+        lines.append("In LexOS: yes" + (f" · M-{matter.lexos_matter_number}" if matter.lexos_matter_number else ""))
+    ctx.reply("\n".join(lines))
+
+
+def cmd_reply(ctx: Ctx, args: str) -> None:
+    ref, _, body = args.strip().partition(" ")
+    body = body.strip()
+    if not ref or not body:
+        ctx.reply("Usage: /reply M-12 Your message to the client")
+        return
+    matter = _matter_or_reply(ctx, ref)
+    if not matter:
+        return
+    client = matter.client
+    target = client and (client.phone or client.bsuid)
+    if not target:
+        ctx.reply(f"{matter.ref} has no client number to reply to.")
+        return
+    # A lawyer is now talking to the client: the AI steps back.
+    client.bot_muted = True
+    if ctx.send(target, body, contact=client):
+        ctx.reply(f"✉️ Sent to {client.name or target}. AI paused for this client (/unmute {matter.ref} to resume).")
 
 
 def _set_status(ctx: Ctx, args: str, status: str) -> Matter | None:
@@ -241,6 +296,8 @@ COMMANDS: dict[str, Callable[[Ctx, str], None]] = {
     "conflict": cmd_conflict,
     "leads": cmd_leads,
     "matter": cmd_matter,
+    "client": cmd_client,
+    "reply": cmd_reply,
     "accept": cmd_accept,
     "decline": cmd_decline,
     "mute": cmd_mute,

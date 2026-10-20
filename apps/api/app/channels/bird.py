@@ -5,6 +5,9 @@ Docs:
 - Inbound payload: https://bird.com/docs/guides/whatsapp/webhooks/messages
 - Group messages: https://bird.com/docs/guides/whatsapp/groups/receiving
 - Send API: https://bird.com/docs/api/reference/create-whatsapp-message
+- Inbound media: https://bird.com/docs/guides/whatsapp/receiving-whatsapp (audio/images/documents)
+- Media download: https://bird.com/docs/api/reference/get-whatsapp-message-media
+- 24-hour window: https://bird.com/docs/guides/whatsapp/sending-whatsapp#the-customer-service-window
 """
 
 from __future__ import annotations
@@ -27,6 +30,10 @@ MAX_TEXT = 4000
 
 class SignatureError(Exception):
     pass
+
+
+class WindowClosedError(Exception):
+    """Bird refused a free-form send: the 24-hour service window is closed (422 E15044)."""
 
 
 def verify_signature(
@@ -91,11 +98,25 @@ class InboundMessage:
     sender_name: str | None
     group_id: str | None  # data.to.group_id; present only for group messages
     text: str  # text body, or a short placeholder for non-text content
-    kind: str  # text | interactive | media | location | other
+    kind: str  # text | interactive | audio | image | video | document | sticker | location | other
+    # Media (inbound audio/image/video/document/sticker), per Bird's receiving guides.
+    media_id: str | None = None
+    media_url: str | None = None
+    media_mime: str | None = None
+    media_filename: str | None = None
+    caption: str | None = None
+    voice: bool = False  # True for a voice note recorded in the chat
+
+    @property
+    def is_media(self) -> bool:
+        return self.kind in MEDIA_KINDS
 
     @property
     def sender_key(self) -> str:
         return self.sender_phone or self.sender_bsuid or "unknown"
+
+
+MEDIA_KINDS = ("audio", "image", "video", "document", "sticker")
 
 
 def parse_received(event: dict[str, Any]) -> InboundMessage | None:
@@ -108,6 +129,7 @@ def parse_received(event: dict[str, Any]) -> InboundMessage | None:
     sender = data.get("from") or {}
     to = data.get("to") or {}
 
+    media_fields: dict[str, Any] = {}
     if text := (data.get("text") or {}).get("body"):
         kind = "text"
     elif reply := data.get("interactive_reply"):
@@ -115,17 +137,31 @@ def parse_received(event: dict[str, Any]) -> InboundMessage | None:
         rtype = reply.get("type")
         arm = reply.get(rtype) if isinstance(reply.get(rtype), dict) else {}
         text = arm.get("text") or arm.get("slug") or ""
-    elif any(data.get(k) for k in ("image", "video", "audio", "document", "sticker")):
-        kind = "media"
-        media = next(data[k] for k in ("image", "video", "audio", "document", "sticker") if data.get(k))
-        caption = media.get("caption") if isinstance(media, dict) else None
-        text = caption or "[attachment]"
+    elif media_kind := next((k for k in MEDIA_KINDS if isinstance(data.get(k), dict)), None):
+        kind = media_kind
+        media = data[media_kind]
+        media_fields = {
+            "media_id": media.get("id"),
+            "media_url": media.get("url"),
+            "media_mime": media.get("mime_type"),
+            "media_filename": media.get("filename"),
+            "caption": (media.get("caption") or "").strip() or None,
+            "voice": bool(media.get("voice")),
+        }
+        if media_kind == "audio":
+            text = "[voice note]" if media_fields["voice"] else "[audio file]"
+        elif media_kind == "document":
+            name = media_fields["media_filename"] or "document"
+            text = f"[document: {name}]" + (f" {media_fields['caption']}" if media_fields["caption"] else "")
+        else:
+            text = media_fields["caption"] or f"[{media_kind}]"
     elif data.get("location"):
         kind, text = "location", "[location]"
     else:
         kind, text = "other", "[unsupported message]"
 
     return InboundMessage(
+        **(media_fields if kind in MEDIA_KINDS else {}),
         provider_id=data.get("whatsapp_id", ""),
         business_number=to.get("phone_number", ""),
         sender_phone=sender.get("phone_number"),
@@ -163,6 +199,18 @@ class Messenger(Protocol):
     def send_text(self, to: str, body: str, from_number: str | None = None,
                   reply_to: str | None = None) -> list[str]: ...
 
+    def send_template(self, to: str, from_number: str, slug: str, language: str | None = None,
+                      body_params: list[str] | None = None) -> str: ...
+
+    def download_media(self, url: str) -> tuple[bytes, str]: ...
+
+
+def _is_window_closed(resp: httpx.Response) -> bool:
+    return resp.status_code == 422 and ("E15044" in resp.text or "WhatsAppServiceWindowClosed" in resp.text)
+
+
+MAX_MEDIA_BYTES = 25 * 1024 * 1024
+
 
 class BirdClient:
     """Minimal Bird WhatsApp sender."""
@@ -191,11 +239,46 @@ class BirdClient:
             if reply_to and i == 0:
                 payload["in_reply_to_message_id"] = reply_to
             resp = self._client.post(f"{self.base_url}/v1/whatsapp/messages", json=payload)
+            if _is_window_closed(resp):
+                raise WindowClosedError(to)
             if resp.status_code >= 400:
                 log.error("Bird send failed: %s %s", resp.status_code, resp.text[:500])
                 resp.raise_for_status()
             ids.append(resp.json().get("id", ""))
         return ids
+
+    def send_template(self, to: str, from_number: str, slug: str, language: str | None = None,
+                      body_params: list[str] | None = None) -> str:
+        """Send an approved template (reaches the contact outside the 24-hour window)."""
+        template: dict[str, Any] = {"slug": slug}
+        if language:
+            template["language"] = language
+        if body_params:
+            template["components"] = [{"type": "body", "parameters": [
+                {"type": "text", "text": p[:1000]} for p in body_params]}]
+        resp = self._client.post(f"{self.base_url}/v1/whatsapp/messages",
+                                 json={"to": to, "from": from_number, "template": template})
+        if resp.status_code >= 400:
+            log.error("Bird template send failed: %s %s", resp.status_code, resp.text[:500])
+            resp.raise_for_status()
+        return resp.json().get("id", "")
+
+    def download_media(self, url: str) -> tuple[bytes, str]:
+        """Fetch inbound media. Bird answers with a 302 to a pre-signed storage URL,
+        which must be fetched WITHOUT the Authorization header."""
+        if not url.startswith(("https://", "http://localhost")) or ".bird.com/" not in url + "/" and "localhost" not in url:
+            raise ValueError("unexpected media URL")
+        first = self._client.get(url, follow_redirects=False)
+        if first.status_code in (301, 302, 303, 307, 308):
+            location = first.headers.get("location", "")
+            with httpx.Client(timeout=60.0, follow_redirects=True) as anon:
+                resp = anon.get(location)
+        else:
+            resp = first
+        resp.raise_for_status()
+        if len(resp.content) > MAX_MEDIA_BYTES:
+            raise ValueError("media too large")
+        return resp.content, resp.headers.get("content-type", "application/octet-stream")
 
 
 class NullMessenger:
@@ -204,8 +287,26 @@ class NullMessenger:
     def __init__(self) -> None:
         self.sent: list[dict[str, Any]] = []
 
+        self.templates: list[dict[str, Any]] = []
+        # Tests can fill these: recipients whose window is closed, and media bytes by URL.
+        self.closed_windows: set[str] = set()
+        self.media: dict[str, tuple[bytes, str]] = {}
+
     def send_text(self, to: str, body: str, from_number: str | None = None,
                   reply_to: str | None = None) -> list[str]:
+        if to in self.closed_windows:
+            raise WindowClosedError(to)
         self.sent.append({"to": to, "body": body, "from": from_number, "reply_to": reply_to})
         log.info("[dry-run] would send %d chars to %s", len(body), to)
         return [f"dry_{len(self.sent)}"]
+
+    def send_template(self, to: str, from_number: str, slug: str, language: str | None = None,
+                      body_params: list[str] | None = None) -> str:
+        self.templates.append({"to": to, "from": from_number, "slug": slug,
+                               "language": language, "params": body_params})
+        return f"dry_tpl_{len(self.templates)}"
+
+    def download_media(self, url: str) -> tuple[bytes, str]:
+        if url not in self.media:
+            raise ValueError("no media in dry-run")
+        return self.media[url]

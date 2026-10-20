@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -11,6 +11,9 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 class Base(DeclarativeBase):
     pass
 
+
+# On Postgres all WhatsApp tables live in this schema (shared LexOS database).
+PG_SCHEMA = "wa"
 
 _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None
@@ -31,6 +34,10 @@ def init_engine(url: str) -> Engine:
     kwargs: dict = {"pool_pre_ping": True}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        # Works behind Supabase's transaction pooler (no server-side prepared statements).
+        kwargs["connect_args"] = {"prepare_threshold": None}
+        kwargs["execution_options"] = {"schema_translate_map": {None: PG_SCHEMA}}
     _engine = create_engine(url, **kwargs)
     _SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
     return _engine
@@ -45,7 +52,17 @@ def get_engine() -> Engine:
 def create_all() -> None:
     from . import models  # noqa: F401  (registers tables)
 
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as conn:
+            conn.execute(text(f"create schema if not exists {PG_SCHEMA}"))
+            # Lock the schema down: only the service's own DB role uses it.
+            conn.execute(text(f"revoke all on schema {PG_SCHEMA} from public"))
+    Base.metadata.create_all(engine)
+
+
+def is_postgres() -> bool:
+    return get_engine().dialect.name == "postgresql"
 
 
 @contextmanager
