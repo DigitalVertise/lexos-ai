@@ -7,6 +7,20 @@ import { NextResponse, type NextRequest } from "next/server";
  * on the server for every data access (lib/auth.ts + Postgres RLS).
  */
 export async function proxy(request: NextRequest) {
+  // One address in production: sessions, auth emails and OAuth callbacks all
+  // live on NEXT_PUBLIC_APP_URL, so other hostnames (e.g. lexos-ai-two) redirect.
+  const canonical = process.env.NEXT_PUBLIC_APP_URL;
+  if (canonical && process.env.VERCEL_ENV === "production") {
+    const target = new URL(canonical);
+    if (request.nextUrl.host !== target.host) {
+      const url = request.nextUrl.clone();
+      url.protocol = target.protocol;
+      url.host = target.host;
+      url.port = "";
+      return NextResponse.redirect(url, 308);
+    }
+  }
+
   let response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

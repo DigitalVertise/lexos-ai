@@ -1,5 +1,5 @@
 import { ActionForm, SubmitButton } from "@/components/form";
-import { Badge, Button, ButtonLink, Card, Field, Input, Notice, PageHeader, SectionTitle, Select, formatDate } from "@/components/ui";
+import { Badge, Button, Card, buttonStyles, Field, Input, Notice, PageHeader, SectionTitle, Select, formatDate } from "@/components/ui";
 import { openBillingPortal, startCheckout } from "@/lib/actions/billing";
 import { inviteMember, removeMember, revokeInvitation, updateFirm } from "@/lib/actions/firm";
 import { connectNotion, disconnectBigin, disconnectNotion } from "@/lib/actions/integrations";
@@ -22,7 +22,8 @@ const INTEGRATION_MESSAGES: Record<string, { tone: "ok" | "warn" | "bad"; text: 
   connected: { tone: "ok", text: "Zoho Bigin is connected." },
   disconnected: { tone: "ok", text: "Integration disconnected." },
   denied: { tone: "warn", text: "Zoho access was not granted. Nothing was connected." },
-  expired: { tone: "bad", text: "The connection attempt expired or was started by another user. Please try again." },
+  expired: { tone: "bad", text: "The connection attempt expired. Please tap Connect Bigin again." },
+  mismatch: { tone: "bad", text: "That Zoho approval belongs to a different LexOS user or firm. Sign in as the admin who started it and try again." },
   failed: { tone: "bad", text: "Zoho Bigin could not be connected. Please try again." },
   forbidden: { tone: "bad", text: "Only owners and admins can manage integrations." },
   unavailable: { tone: "bad", text: "Bigin connection is not set up on this server yet." },
@@ -151,7 +152,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </div>
           {isAdmin && (
             <div className="mt-3 flex flex-wrap gap-2">
-              {integrations.zoho && <ButtonLink href="/api/integrations/zoho/start" prefetch={false} variant={bigin ? "secondary" : "primary"}>{bigin ? "Reconnect Bigin" : "Connect Bigin"}</ButtonLink>}
+              {integrations.zoho && <a href="/api/integrations/zoho/start" className={buttonStyles[bigin ? "secondary" : "primary"]}>{bigin ? "Reconnect Bigin" : "Connect Bigin"}</a>}
               {bigin && <form action={disconnectBigin}><Button variant="secondary" type="submit">Disconnect</Button></form>}
             </div>
           )}
