@@ -38,16 +38,32 @@
 - Production deployment `dpl_JCetCRVegyjHPGA2SLDLgfwHLQGw` (commit `b8df459`): READY. Verified publicly (no login wall): landing page with packages, `/signup` form, `/dashboard` redirects signed-out users to `/login`. Also reachable at https://lexos-ai-two.vercel.app.
 - **Rollback**: Vercel → Deployments → choose an earlier production deployment → *Promote to Production*. Database migrations are additive, so rolling back the app does not require a database rollback.
 
+## Release 3 (commits a6de9f8 … 7f1a6f2)
+
+| Area | Status | Evidence / note |
+|---|---|---|
+| Zoho Bigin (per-firm OAuth, client sync, contact import) | ⚠️ Built; connection being tested by owner | Signed OAuth state, least-privilege scopes, encrypted tokens |
+| Notion (firm token, attach pages, assistants read them) | ✅ Connected live by owner | Settings showed "Connected to Moataz Abbasy's Notion" |
+| Migration 0005 (integration storage) | ✅ Applied by owner | Verified: 5 functions, anon cannot execute |
+| Migration 0006 (branding, portal, avatars, chat) | ⏳ Waiting for owner to run | Applies cleanly on local Postgres 16; app degrades gracefully until applied |
+| Tenant isolation test | ✅ Pass (local Postgres 16, all migrations) | `TENANT_ISOLATION_OK` |
+| Portal isolation test | ✅ Pass (local) | `PORTAL_ISOLATION_OK` — client sees only own matters/shared docs; cannot spoof sender/client; revoke works |
+| Firm branding (website detection, logo, swatches, theme) | ⚠️ Built, unit-tested, not tried live | SSRF-guarded fetch; needs 0006 |
+| White-label client portal + embed/widget/link snippets | ⚠️ Built, DB-tested, not tried live | Magic-link sign-in needs the Supabase Site URL / redirect allow-list |
+| Avatar studio + provider adapters | ⚠️ Built; providers untested without accounts | Built-in portrait works offline; HeyGen/D-ID/Simli/ElevenLabs need firm keys; LeapTalk needs `HF_TOKEN` on the runtime |
+| Assistant Chat / Voice / Avatar modes | ⚠️ Built, not tried live | Streaming; falls back to direct AI route when runtime unavailable |
+| FastAPI agent runtime on Render (free, Frankfurt) | ⏳ Deploying | `https://lexos-ai-api.onrender.com`; keep-awake ping every 10 min |
+| WhatsApp (media, voice notes, 24h templates, /client, /reply, LexOS + Bigin + Notion lead logging) | ⚠️ Built, 44 tests; bridge verified on local Postgres | Not live until Bird key + webhook + `LEXOS_DATABASE_URL` are set and the owner approves turning it on |
+| Web unit tests | ✅ 50/50 | |
+| API tests | ✅ 44/44 | |
+
 ## Required actions (owner)
 
-1. **Supabase → Authentication → URL Configuration**: set Site URL and redirect URL (INTEGRATIONS.md §1). *Without this, sign-up confirmation emails will not work.*
-2. **Vercel → Environment Variables** (Sensitive, Production + Preview), then redeploy:
-   - `STRIPE_SECRET_KEY` = Stripe sandbox → Developers → API keys → Secret key (`sk_test_…`).
-   - `SUPABASE_SERVICE_ROLE_KEY` = Supabase → Project Settings → API keys → service_role / secret key.
-3. Before charging real firms: repeat the Stripe setup in live mode (new prices + webhook) and swap the four Stripe variables.
-4. Optional: `OPENAI_API_KEY` to bill AI to your own OpenAI account instead of Vercel AI credits.
-5. Run `supabase/tests/tenant_isolation.sql` in the Supabase SQL editor; expect `TENANT_ISOLATION_OK`.
-6. For Bigin: create the Zoho server-based app (INTEGRATIONS.md §4).
+1. Run `lexos_update_0006.sql` in the Supabase SQL editor.
+2. Supabase → Authentication → URL Configuration: Site URL `https://lexos-ai-digitalvertises-projects.vercel.app`, and add `https://lexos-ai-digitalvertises-projects.vercel.app/**` to Redirect URLs (password reset and portal sign-in links).
+3. Send: Vercel AI Gateway API key, Supabase session-pooler connection string, Hugging Face read token (for the runtime).
+4. Approve switching the WhatsApp agent on for +44 7378 153633. It will then auto-reply to people who message that number.
+5. Stripe: `STRIPE_SECRET_KEY` (sk_test_…) and `SUPABASE_SERVICE_ROLE_KEY` in Vercel.
 
 ## Known gaps and risks before onboarding paying firms
 
