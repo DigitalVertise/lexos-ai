@@ -69,6 +69,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="LexOS AI", version="0.1.0", lifespan=lifespan)
 
+from .runtime.routes import router as runtime_router  # noqa: E402
+
+app.include_router(runtime_router)
+
 
 # --------------------------------------------------------------------------
 # Health
