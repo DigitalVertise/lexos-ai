@@ -50,7 +50,8 @@ export function appUrl(): string {
 export const integrationStatus = () => {
   const e = env();
   return {
-    ai: Boolean(e.OPENAI_API_KEY),
+    // Direct OpenAI key, or Vercel AI Gateway (OIDC) when running on Vercel.
+    ai: Boolean(e.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY || process.env.VERCEL === "1"),
     billing: Boolean(e.STRIPE_SECRET_KEY && e.STRIPE_WEBHOOK_SECRET && e.STRIPE_PRICE_BASIC && e.STRIPE_PRICE_PRO),
     serviceRole: Boolean(e.SUPABASE_SERVICE_ROLE_KEY),
   };

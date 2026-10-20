@@ -46,7 +46,7 @@ export async function signUp(_: FormState, data: FormData): Promise<FormState> {
     return { error: error.code === "weak_password" ? "Choose a stronger password." : "Could not create the account. Please try again." };
   }
   if (result.session) redirect("/onboarding");
-  return { ok: "Check your email to confirm your account, then sign in." };
+  return { ok: "Check your email and tap the confirmation link. Then come back here and sign in." };
 }
 
 export async function requestReset(_: FormState, data: FormData): Promise<FormState> {
