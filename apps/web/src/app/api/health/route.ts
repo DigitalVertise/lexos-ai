@@ -18,6 +18,8 @@ function tokenOk(given: string | null): boolean {
  * With the operator token (?deep=1, header x-health-token): also makes one
  * tiny AI request to prove the AI route works end to end. No user data is used.
  */
+export const maxDuration = 180;
+
 export async function GET(request: NextRequest) {
   const status = integrationStatus();
   const body: Record<string, unknown> = {
@@ -53,6 +55,25 @@ export async function GET(request: NextRequest) {
         .map((m) => m.id);
     } catch (err) {
       body.eligibleModels = { error: (err as Error).name };
+    }
+  }
+  if (request.nextUrl.searchParams.get("runtime") === "1"
+      && tokenOk(request.headers.get("x-health-token") ?? request.nextUrl.searchParams.get("token"))) {
+    const started = Date.now();
+    try {
+      const { runtimeConfigured, runtimeFetch } = await import("@/lib/runtime");
+      if (!runtimeConfigured()) body.runtime = { ok: false, error: "not configured" };
+      else {
+        const caps = await (await runtimeFetch("/v1/capabilities", { timeoutMs: 90_000 })).json();
+        const tts = await runtimeFetch("/v1/voice/tts", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: "LexOS health check." }), timeoutMs: 60_000,
+        });
+        const bytes = (await tts.arrayBuffer()).byteLength;
+        body.runtime = { ok: bytes > 1000, capabilities: caps, ttsBytes: bytes, ms: Date.now() - started };
+      }
+    } catch (err) {
+      body.runtime = { ok: false, error: (err as Error).message.slice(0, 200), ms: Date.now() - started };
     }
   }
   return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
