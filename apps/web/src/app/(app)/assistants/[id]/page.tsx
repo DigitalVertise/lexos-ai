@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AgentConsole } from "@/components/agent-console";
 import { AssistantRunner } from "@/components/assistant-runner";
 import { ActionForm, SubmitButton } from "@/components/form";
 import { Badge, Button, Card, Field, PageHeader, Select, Textarea, formatDate } from "@/components/ui";
 import { releaseAssistant, updateAssistant } from "@/lib/actions/assistants";
 import { catalogAgent, CUSTOM_AGENT_KEY } from "@/lib/agents/catalog";
 import { ADMIN_ROLES, hasRole, requireWorkspace } from "@/lib/auth";
-import { canRun, monthStart } from "@/lib/entitlements";
+import { monthlyRuns } from "@/lib/agents/usage";
+import { providerMeta } from "@/lib/avatars/providers";
+import { canRun } from "@/lib/entitlements";
 import { integrationStatus } from "@/lib/env";
 import { planState } from "@/lib/plans";
 import { matterRef, type AgentHire, type AiOutput, type DocumentRow, type Matter } from "@/lib/types";
@@ -24,10 +27,10 @@ export default async function AssistantPage({ params, searchParams }: {
   const def = catalogAgent(hire.agent_key);
   const isAdmin = hasRole(ws, ADMIN_ROLES);
 
-  const [{ data: matters }, { data: history }, { count: monthRuns }] = await Promise.all([
+  const [{ data: matters }, { data: history }, monthRuns] = await Promise.all([
     ws.supabase.from("matters").select("id, number, title, status").eq("org_id", ws.org.id).neq("status", "closed").order("number", { ascending: false }).limit(200),
     ws.supabase.from("ai_outputs").select("id, matter_id, instructions, created_at").eq("org_id", ws.org.id).eq("agent_hire_id", hire.id).order("created_at", { ascending: false }).limit(15),
-    ws.supabase.from("ai_outputs").select("id", { count: "exact", head: true }).eq("org_id", ws.org.id).gte("created_at", monthStart().toISOString()),
+    monthlyRuns(ws),
   ]);
   const matterList = (matters ?? []) as Pick<Matter, "id" | "number" | "title" | "status">[];
   const selected = matterList.find((m) => m.id === matterParam) ?? null;
@@ -40,8 +43,9 @@ export default async function AssistantPage({ params, searchParams }: {
       .map((d) => ({ id: d.id, title: d.title, readable: d.source === "upload" && READABLE.has(d.mime_type ?? "") }));
   }
 
-  const runDecision = canRun(planState(ws.org), monthRuns ?? 0, 0);
-  const disabledReason = !integrationStatus().ai
+  const runDecision = canRun(planState(ws.org), monthRuns, 0);
+  const avatarMeta = providerMeta(hire.avatar?.provider);
+  const disabledReason = !integrationStatus().ai && !integrationStatus().runtime
     ? "The AI service is not configured yet. An administrator needs to add the OpenAI key."
     : hire.status === "paused" ? `${hire.name} is paused. Resume it in the settings below.`
     : runDecision.ok ? null : runDecision.reason;
@@ -74,18 +78,36 @@ export default async function AssistantPage({ params, searchParams }: {
               <p className="mt-2 text-xs text-muted">No documents on {matterRef(selected)} yet. <Link className="text-accent" href={`/matters/${selected.id}#documents`}>Upload one</Link> to let the assistant read it.</p>
             )}
           </Card>
-          <AssistantRunner
-            key={selected?.id ?? "none"}
+          <AgentConsole
             hireId={hire.id}
             assistantName={hire.name}
-            examplePrompt={def?.examplePrompt ?? "Describe the task…"}
-            matter={selected ? { id: selected.id, ref: matterRef(selected), title: selected.title } : null}
-            documents={documents}
+            matter={selected ? { id: selected.id, ref: matterRef(selected) } : null}
             disabledReason={disabledReason}
+            avatar={hire.avatar && avatarMeta ? {
+              provider: avatarMeta.id, providerName: avatarMeta.name, kind: avatarMeta.kind,
+              portraitUrl: hire.avatar.portrait_path ? `/api/agents/${hire.id}/portrait?v=${encodeURIComponent(hire.avatar.portrait_path)}` : null,
+              anchor: hire.avatar.anchor ?? null, voice: hire.avatar.voice ?? null, previewImage: hire.avatar.provider_preview_url ?? null,
+            } : null}
+            taskRunner={
+              <AssistantRunner
+                key={selected?.id ?? "none"}
+                hireId={hire.id}
+                assistantName={hire.name}
+                examplePrompt={def?.examplePrompt ?? "Describe the task…"}
+                matter={selected ? { id: selected.id, ref: matterRef(selected), title: selected.title } : null}
+                documents={documents}
+                disabledReason={disabledReason}
+              />
+            }
           />
         </div>
 
         <aside className="space-y-4">
+          <Card className="p-4">
+            <p className="text-sm font-medium">Avatar & voice</p>
+            <p className="mt-1 text-sm text-muted">{avatarMeta ? avatarMeta.name : "Not set up yet"}</p>
+            <Link className="mt-1 inline-block text-sm text-accent" href={`/studio/${hire.id}`}>Open Avatar studio →</Link>
+          </Card>
           {def && (
             <Card className="p-4">
               <p className="text-sm font-medium">Skills</p>

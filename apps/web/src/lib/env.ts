@@ -16,6 +16,10 @@ const schema = z.object({
   // the team is eligible for (see /api/health?models=1), e.g. openai/gpt-5-mini.
   OPENAI_MODEL: z.string().default("gpt-5-mini"),
 
+  // FastAPI agent runtime (LiteLLM chat, voice, avatars) — server-to-server.
+  AGENT_RUNTIME_URL: z.string().url().optional(),
+  AGENT_RUNTIME_SECRET: z.string().min(24).optional(),
+
   STRIPE_SECRET_KEY: z.string().startsWith("sk_").optional(),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_").optional(),
   STRIPE_PRICE_BASIC: z.string().startsWith("price_").optional(),
@@ -58,5 +62,6 @@ export const integrationStatus = () => {
     // Bigin needs the LexOS Zoho app credentials plus the token encryption key.
     zoho: Boolean(process.env.ZOHO_CLIENT_ID && process.env.ZOHO_CLIENT_SECRET && process.env.INTEGRATIONS_ENCRYPTION_KEY),
     notion: Boolean(process.env.INTEGRATIONS_ENCRYPTION_KEY),
+    runtime: Boolean(e.AGENT_RUNTIME_URL && e.AGENT_RUNTIME_SECRET),
   };
 };

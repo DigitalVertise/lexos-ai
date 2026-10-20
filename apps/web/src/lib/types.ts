@@ -12,6 +12,15 @@ export interface Organization {
   current_period_end: string | null;
   stripe_customer_id: string | null;
   created_at: string;
+  website_url: string | null;
+  logo_url: string | null;
+  brand_colors: string[];
+  brand_primary: string | null;
+  brand_accent: string | null;
+  theme: "light" | "dark" | "auto";
+  portal_slug: string | null;
+  portal_enabled: boolean;
+  portal_welcome: string | null;
 }
 
 export interface Membership {
@@ -84,6 +93,7 @@ export interface DocumentRow {
   size_bytes: number | null;
   status: "draft" | "final" | "archived";
   created_at: string;
+  shared_with_client?: boolean;
 }
 
 export interface AgentHire {
@@ -94,6 +104,21 @@ export interface AgentHire {
   instructions: string | null;
   status: "active" | "paused";
   hired_at: string;
+  avatar: AvatarConfig | null;
+}
+
+/** Saved on agent_hires.avatar. Portrait files live in the private documents bucket. */
+export interface AvatarConfig {
+  provider: string;               // see lib/avatars/providers.ts
+  portrait_path?: string | null;  // {org}/avatars/{hire}/portrait.ext
+  portrait_source?: "upload" | "generated" | "provider" | null;
+  anchor?: { x: number; y: number } | null; // lip anchor, 0..1 of image size
+  voice?: string | null;          // edge-tts voice id or provider voice id
+  provider_avatar_id?: string | null;
+  provider_avatar_kind?: string | null; // e.g. HeyGen "avatar" | "talking_photo"
+  provider_voice_id?: string | null;
+  provider_preview_url?: string | null;
+  consent?: { confirmed: boolean; by: string; at: string } | null;
 }
 
 export interface AiOutput {

@@ -58,11 +58,15 @@ export async function requireWorkspace(): Promise<Workspace> {
   const preferred = (await cookies()).get(ORG_COOKIE)?.value;
   const membership = memberships.find((m) => m.org_id === preferred) ?? memberships[0];
 
-  const { data: org, error: orgError } = await supabase
-    .from("organizations")
-    .select("id, name, country, default_jurisdiction, plan, subscription_status, trial_ends_at, current_period_end, stripe_customer_id, created_at")
-    .eq("id", membership.org_id)
-    .single();
+  const BASE = "id, name, country, default_jurisdiction, plan, subscription_status, trial_ends_at, current_period_end, stripe_customer_id, created_at";
+  const BRANDING = "website_url, logo_url, brand_colors, brand_primary, brand_accent, theme, portal_slug, portal_enabled, portal_welcome";
+  let { data: org, error: orgError } = await supabase.from("organizations").select(`${BASE}, ${BRANDING}`)
+    .eq("id", membership.org_id).single();
+  if (orgError?.code === "42703") {
+    // Branding columns not migrated yet (0006): keep the app working with defaults.
+    ({ data: org, error: orgError } = await supabase.from("organizations").select(BASE).eq("id", membership.org_id).single());
+    if (org) Object.assign(org, ORG_BRANDING_DEFAULTS);
+  }
   if (orgError || !org) throw new Error("Could not load your firm");
 
   return { supabase, user, org: org as Organization, role: membership.role, memberships };
@@ -75,6 +79,11 @@ export function hasRole(ws: Pick<Workspace, "role">, roles: Role[]): boolean {
 export function assertRole(ws: Pick<Workspace, "role">, roles: Role[]): void {
   if (!hasRole(ws, roles)) throw new ForbiddenError();
 }
+
+const ORG_BRANDING_DEFAULTS = {
+  website_url: null, logo_url: null, brand_colors: [], brand_primary: null, brand_accent: null,
+  theme: "auto", portal_slug: null, portal_enabled: false, portal_welcome: null,
+} as const;
 
 export const ADMIN_ROLES: Role[] = ["owner", "admin"];
 export const LAWYER_ROLES: Role[] = ["owner", "admin", "lawyer"];

@@ -1,12 +1,15 @@
 import type { NextConfig } from "next";
 
-const securityHeaders = [
-  { key: "X-Frame-Options", value: "DENY" },
+const baseHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  // Microphone is used by voice mode on this site only.
+  { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
 ];
+const noFraming = [{ key: "X-Frame-Options", value: "DENY" }, { key: "Content-Security-Policy", value: "frame-ancestors 'none'" }];
+// Only the small portal launcher may be embedded on a firm's own website.
+const embeddable = [{ key: "Content-Security-Policy", value: "frame-ancestors https:" }];
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
@@ -21,7 +24,10 @@ const nextConfig: NextConfig = {
     },
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/((?!portal/[^/]+/embed).*)", headers: [...baseHeaders, ...noFraming] },
+      { source: "/portal/:slug/embed", headers: [...baseHeaders, ...embeddable] },
+    ];
   },
 };
 

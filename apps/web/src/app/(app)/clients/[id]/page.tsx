@@ -2,11 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClientFields } from "@/components/client-fields";
 import { ActionForm, SubmitButton } from "@/components/form";
-import { Badge, Button, ButtonLink, Card, Notice, PageHeader, SectionTitle, formatDate } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Field, Input, Notice, PageHeader, SectionTitle, Textarea, formatDate } from "@/components/ui";
 import { deleteClient, updateClient } from "@/lib/actions/clients";
 import { syncClientToBigin } from "@/lib/actions/integrations";
+import { invitePortalClient, replyToClient, revokePortalAccess } from "@/lib/actions/portal";
 import { listConnections } from "@/lib/integrations/store";
-import { requireWorkspace } from "@/lib/auth";
+import { LAWYER_ROLES, hasRole, requireWorkspace } from "@/lib/auth";
 import { matterRef, type Client, type Matter } from "@/lib/types";
 
 export default async function ClientPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
@@ -18,6 +19,13 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
   const { data: matters } = await ws.supabase.from("matters").select("id, number, title, status, opened_on")
     .eq("org_id", ws.org.id).eq("client_id", client.id).order("number", { ascending: false });
   const bigin = (await listConnections(ws.supabase, ws.org.id)).find((c) => c.provider === "zoho_bigin");
+  const canInvite = hasRole(ws, LAWYER_ROLES);
+  const [{ data: access }, { data: messages }] = await Promise.all([
+    ws.supabase.from("portal_access").select("id, email, user_id, created_at, revoked_at").eq("org_id", ws.org.id).eq("client_id", client.id).order("created_at"),
+    ws.supabase.from("portal_messages").select("id, sender, body, matter_id, created_at, read_at").eq("org_id", ws.org.id).eq("client_id", client.id).order("created_at", { ascending: false }).limit(30),
+  ]);
+  const accessRows = (access ?? []) as { id: string; email: string; user_id: string | null; created_at: string; revoked_at: string | null }[];
+  const thread = ((messages ?? []) as { id: string; sender: "client" | "firm"; body: string; matter_id: string | null; created_at: string; read_at: string | null }[]).reverse();
 
   return (
     <>
@@ -49,6 +57,57 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
           <SubmitButton>Save changes</SubmitButton>
         </ActionForm>
       </Card>
+
+      <div id="portal" />
+      <SectionTitle>Client portal</SectionTitle>
+      {!ws.org.portal_enabled ? (
+        <p className="text-sm text-muted">The client portal is off. Switch it on in <a className="text-accent" href="/settings/branding">Settings → Branding & client portal</a>.</p>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Card className="p-5">
+            <p className="text-sm font-medium">Portal access</p>
+            {accessRows.length === 0 ? <p className="mt-1 text-sm text-muted">Nobody can see this client’s matters in the portal yet.</p> : (
+              <ul className="mt-2 space-y-2">
+                {accessRows.map((a) => (
+                  <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <span>{a.email} <span className="text-xs text-muted">{a.revoked_at ? "· revoked" : a.user_id ? "· signed in" : "· invited"}</span></span>
+                    {!a.revoked_at && canInvite && (
+                      <form action={revokePortalAccess}><input type="hidden" name="id" value={a.id} /><input type="hidden" name="clientId" value={client.id} />
+                        <button className="text-xs text-muted hover:text-bad" type="submit">Revoke</button></form>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {canInvite && (
+              <ActionForm action={invitePortalClient} resetOnSuccess className="mt-3 flex flex-wrap items-end gap-2">
+                <input type="hidden" name="clientId" value={client.id} />
+                <div className="min-w-48 flex-1"><Field label="Give access to (email)"><Input name="email" type="email" defaultValue={client.email ?? ""} required /></Field></div>
+                <SubmitButton>Give access</SubmitButton>
+              </ActionForm>
+            )}
+            <p className="mt-2 text-xs text-muted">They sign in at {`/portal/${ws.org.portal_slug}`} with this email. Only documents you mark “Share with client” are visible.</p>
+          </Card>
+          <Card className="p-5">
+            <p className="text-sm font-medium">Portal messages</p>
+            {thread.length === 0 ? <p className="mt-1 text-sm text-muted">No messages.</p> : (
+              <ul className="mt-2 max-h-80 space-y-2 overflow-y-auto">
+                {thread.map((m) => (
+                  <li key={m.id} className={m.sender === "client" ? "rounded-lg bg-surface-2 p-2" : "ml-6 rounded-lg border border-line p-2"}>
+                    <p className="whitespace-pre-wrap text-sm">{m.body}</p>
+                    <p className="text-xs text-muted">{m.sender === "client" ? client.name : "Firm"} · {formatDate(m.created_at, true)}{m.sender === "client" && !m.read_at ? " · new" : ""}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <ActionForm action={replyToClient} resetOnSuccess className="mt-3 space-y-2">
+              <input type="hidden" name="clientId" value={client.id} />
+              <Textarea name="body" rows={3} maxLength={5000} placeholder="Reply to the client…" required />
+              <SubmitButton>Send reply</SubmitButton>
+            </ActionForm>
+          </Card>
+        </div>
+      )}
 
       <SectionTitle>CRM (Zoho Bigin)</SectionTitle>
       <Card className="max-w-2xl p-5">

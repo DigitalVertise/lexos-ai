@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { open, seal } from "../crypto";
 
-export type Provider = "zoho_bigin" | "notion";
+export type Provider = "zoho_bigin" | "notion" | "heygen" | "elevenlabs" | "did" | "simli" | "livetalking";
 
 export interface ConnectionSummary {
   provider: Provider;

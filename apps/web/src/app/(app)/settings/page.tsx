@@ -1,5 +1,5 @@
 import { ActionForm, SubmitButton } from "@/components/form";
-import { Badge, Button, Card, buttonStyles, Field, Input, Notice, PageHeader, SectionTitle, Select, formatDate } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, buttonStyles, Field, Input, Notice, PageHeader, SectionTitle, Select, formatDate } from "@/components/ui";
 import { openBillingPortal, startCheckout } from "@/lib/actions/billing";
 import { inviteMember, removeMember, revokeInvitation, updateFirm } from "@/lib/actions/firm";
 import { connectNotion, disconnectBigin, disconnectNotion } from "@/lib/actions/integrations";
@@ -48,7 +48,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <PageHeader title="Settings" description={ws.org.name} />
+      <PageHeader title="Settings" description={ws.org.name} actions={
+        <div className="flex flex-wrap gap-2">
+          <ButtonLink href="/settings/branding" variant="secondary">Branding & client portal</ButtonLink>
+          <ButtonLink href="/studio" variant="secondary">Avatar studio</ButtonLink>
+        </div>
+      } />
 
       <SectionTitle>Firm</SectionTitle>
       <Card className="max-w-2xl p-5">

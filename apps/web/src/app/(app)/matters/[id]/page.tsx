@@ -8,6 +8,7 @@ import { TaskList } from "@/components/task-list";
 import { Badge, ButtonLink, Card, Field, Input, PageHeader, SectionTitle, formatDate } from "@/components/ui";
 import { addLink, deleteDocument, setDocumentStatus } from "@/lib/actions/documents";
 import { attachNotionPage } from "@/lib/actions/integrations";
+import { setDocumentShared } from "@/lib/actions/portal";
 import { listConnections } from "@/lib/integrations/store";
 import { updateMatter } from "@/lib/actions/matters";
 import { catalogAgent } from "@/lib/agents/catalog";
@@ -86,6 +87,17 @@ export default async function MatterPage({ params }: { params: Promise<{ id: str
                   </select>
                   <button type="submit" className="text-xs text-accent">Set</button>
                 </form>
+                {canEdit && ws.org.portal_enabled && (
+                  <form action={setDocumentShared}>
+                    <input type="hidden" name="id" value={d.id} />
+                    <input type="hidden" name="matterId" value={matter.id} />
+                    <input type="hidden" name="shared" value={d.shared_with_client ? "false" : "true"} />
+                    <button type="submit" className={d.shared_with_client ? "text-xs text-ok" : "text-xs text-accent"}
+                      title={d.shared_with_client ? "Visible in the client portal — tap to stop sharing" : "Show this document in the client portal"}>
+                      {d.shared_with_client ? "Shared with client ✓" : "Share with client"}
+                    </button>
+                  </form>
+                )}
                 {canEdit && (
                   <form action={deleteDocument}>
                     <input type="hidden" name="id" value={d.id} />

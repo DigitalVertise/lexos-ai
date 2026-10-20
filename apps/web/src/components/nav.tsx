@@ -7,6 +7,7 @@ import { cx } from "./ui";
 const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/assistants", label: "AI Team" },
+  { href: "/studio", label: "Avatar studio" },
   { href: "/matters", label: "Matters" },
   { href: "/clients", label: "Clients" },
   { href: "/tasks", label: "Tasks" },

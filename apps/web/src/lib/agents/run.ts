@@ -3,7 +3,8 @@ import { audit } from "../audit";
 import type { Workspace } from "../auth";
 import { aiProvider, AIUnavailableError } from "../ai/provider";
 import { extractText } from "../documents";
-import { canRun, monthStart } from "../entitlements";
+import { canRun } from "../entitlements";
+import { monthlyRuns, userRunsLastMinute } from "./usage";
 import { notionPageId, type NotionTokens } from "../integrations/notion";
 import { loadConnection } from "../integrations/store";
 import { planState } from "../plans";
@@ -41,13 +42,8 @@ export async function runAssistant(ws: Workspace, input: RunInput): Promise<RunR
 
   // Package limits.
   const state = planState(ws.org);
-  const since = monthStart().toISOString();
-  const minuteAgo = new Date(Date.now() - 60_000).toISOString();
-  const [{ count: monthCount }, { count: minuteCount }] = await Promise.all([
-    db.from("ai_outputs").select("id", { count: "exact", head: true }).eq("org_id", ws.org.id).gte("created_at", since),
-    db.from("ai_outputs").select("id", { count: "exact", head: true }).eq("created_by", ws.user.id).gte("created_at", minuteAgo),
-  ]);
-  const allowed = canRun(state, monthCount ?? 0, minuteCount ?? 0);
+  const [monthCount, minuteCount] = await Promise.all([monthlyRuns(ws), userRunsLastMinute(ws)]);
+  const allowed = canRun(state, monthCount, minuteCount);
   if (!allowed.ok) return { ok: false, error: allowed.reason };
 
   let matter: Matter | null = null;

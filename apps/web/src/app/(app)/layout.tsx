@@ -4,6 +4,7 @@ import { NavLinks } from "@/components/nav";
 import { Notice } from "@/components/ui";
 import { switchFirm } from "@/lib/actions/firm";
 import { requireWorkspace } from "@/lib/auth";
+import { brandStyle, themeAttr } from "@/lib/branding";
 import { daysUntil } from "@/lib/dates";
 import { planState } from "@/lib/plans";
 
@@ -13,10 +14,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const trialDays = daysUntil(ws.org.trial_ends_at);
 
   return (
-    <div className="min-h-dvh md:grid md:grid-cols-[232px_1fr]">
+    <div data-theme={themeAttr(ws.org.theme)} style={brandStyle(ws.org)} className="min-h-dvh bg-bg text-ink md:grid md:grid-cols-[232px_1fr]">
       <aside className="border-b border-line bg-surface md:min-h-dvh md:border-b-0 md:border-r">
         <div className="flex items-center justify-between px-4 py-4 md:block">
-          <Link href="/dashboard" className="font-display text-lg font-semibold">Lex<span className="text-gold">OS</span> AI</Link>
+          {ws.org.logo_url ? (
+            ws.org.website_url ? (
+              <a href={ws.org.website_url} target="_blank" rel="noopener noreferrer" title={`${ws.org.name} website`} className="block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={ws.org.logo_url} alt={ws.org.name} className="h-9 max-w-40 object-contain" referrerPolicy="no-referrer" />
+              </a>
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={ws.org.logo_url} alt={ws.org.name} className="h-9 max-w-40 object-contain" referrerPolicy="no-referrer" />
+            )
+          ) : (
+            <Link href="/dashboard" className="font-display text-lg font-semibold">Lex<span className="text-gold">OS</span> AI</Link>
+          )}
           {ws.memberships.length > 1 ? (
             <form action={switchFirm} className="md:mt-3">
               <label className="sr-only" htmlFor="org">Firm</label>
