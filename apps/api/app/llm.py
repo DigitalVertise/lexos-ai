@@ -34,13 +34,25 @@ class LiteLLM:
             "temperature": self.s.llm_temperature,
             "max_tokens": max_tokens,
             "timeout": self.s.llm_timeout,
+            **self.s.llm_kwargs,
         }
         if json_mode and not kwargs["model"].startswith("anthropic/"):
             # Anthropic models follow the JSON instruction in the prompt reliably;
             # other providers get native JSON mode.
             kwargs["response_format"] = {"type": "json_object"}
+        if is_reasoning_model(kwargs["model"]):
+            # gpt-5 / o-series reject custom temperature; spend fewer tokens thinking.
+            kwargs.pop("temperature", None)
+            kwargs["reasoning_effort"] = "low"
+            kwargs["max_completion_tokens"] = kwargs.pop("max_tokens") + 1500
+        litellm.drop_params = True
         resp = litellm.completion(**kwargs)
         return resp.choices[0].message.content or ""
+
+
+def is_reasoning_model(model: str) -> bool:
+    name = model.split("/")[-1]
+    return bool(re.match(r"^(gpt-5|o\d)", name)) and "chat" not in name
 
 
 def parse_json(text: str) -> dict[str, Any]:

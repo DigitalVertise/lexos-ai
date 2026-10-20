@@ -27,11 +27,38 @@ class Settings(BaseSettings):
 
     # --- LLM (via LiteLLM, any provider) ----------------------------------
     # Cheap, fast model for intake conversations and routing.
-    llm_model: str = "anthropic/claude-haiku-5-5"
+    llm_model: str = "openai/gpt-5-mini"
     # Stronger model used only for /draft.
-    llm_draft_model: str = "anthropic/claude-sonnet-5-5"
+    llm_draft_model: str = "openai/gpt-5-mini"
     llm_temperature: float = 0.2
     llm_timeout: int = 60
+    # OpenAI-compatible gateway (e.g. Vercel AI Gateway https://ai-gateway.vercel.sh/v1).
+    # When set, every model id is sent as-is to this endpoint ("openai/gpt-5-mini").
+    llm_api_base: str = ""
+    llm_api_key: str = ""
+    # Speech-to-text for WhatsApp voice notes (LiteLLM transcription model id).
+    stt_model: str = "openai/whisper-1"
+
+    # --- Agent runtime (called by the LexOS web app) ---------------------
+    # Shared secret the web app sends as "Authorization: Bearer ...".
+    agent_runtime_secret: str = ""
+    # Default chat model for assistants (gateway model id).
+    agent_model: str = "openai/gpt-5-mini"
+    # Free neural TTS (Microsoft Edge voices via edge-tts).
+    tts_voice_en: str = "en-US-AndrewMultilingualNeural"
+    tts_voice_ar: str = "ar-AE-HamdanNeural"
+    # Hugging Face (free tier): AI portraits + LeapTalk talking-head videos.
+    hf_token: str = ""
+    hf_portrait_model: str = "black-forest-labs/FLUX.1-schnell"
+    hf_talking_head_space: str = "hugging-apps/leaptalk-talking-head"
+    # Optional real-time WebRTC avatar engine (e.g. LiveTalking on a GPU box).
+    avatar_realtime_url: str = ""
+
+    # --- LexOS bridge (WhatsApp leads -> LexOS clients/matters) -----------
+    # Postgres URL of the LexOS Supabase database. When set, the WhatsApp
+    # service stores its own tables in schema "wa" there and mirrors intakes
+    # into LexOS. Falls back to database_url.
+    lexos_database_url: str = ""
 
     # --- CRM ----------------------------------------------------------------
     crm_backend: str = "local"  # local | bigin
@@ -47,6 +74,14 @@ class Settings(BaseSettings):
     default_tenant_whatsapp: str = ""  # E.164 business number connected in Bird
     default_tenant_team_group: str = ""  # wag_... Bird group ID of the team group
     default_tenant_team_phones: str = ""  # comma-separated E.164 numbers of staff
+
+    @property
+    def llm_kwargs(self) -> dict:
+        """Extra LiteLLM kwargs for the configured gateway (empty = provider keys from env)."""
+        if not self.llm_api_base:
+            return {}
+        return {"api_base": self.llm_api_base, "api_key": self.llm_api_key or None,
+                "custom_llm_provider": "openai"}
 
     @property
     def is_production(self) -> bool:
