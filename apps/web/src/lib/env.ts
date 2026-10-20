@@ -12,8 +12,9 @@ const schema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
 
   OPENAI_API_KEY: z.string().min(10).optional(),
-  // Cost-efficient default; override with e.g. gpt-6.1-sol for higher quality.
-  OPENAI_MODEL: z.string().default("gpt-5.4-mini"),
+  // Cost-efficient default. On Vercel AI Gateway use a provider-prefixed id
+  // the team is eligible for (see /api/health?models=1), e.g. openai/gpt-5-mini.
+  OPENAI_MODEL: z.string().default("gpt-5-mini"),
 
   STRIPE_SECRET_KEY: z.string().startsWith("sk_").optional(),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_").optional(),

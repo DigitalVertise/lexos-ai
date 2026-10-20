@@ -51,6 +51,9 @@ class ResponsesProvider implements AIProvider {
         instructions: req.system,
         input: req.input,
         max_output_tokens: req.maxOutputTokens,
+        // Reasoning models spend output tokens on thinking first; keep it light
+        // so the budget goes to the answer the lawyer reads.
+        ...(isReasoningModel(this.model) ? { reasoning: { effort: "low" as const } } : {}),
         // Ask the provider not to retain the conversation for later retrieval.
         store: false,
       },
@@ -63,6 +66,12 @@ class ResponsesProvider implements AIProvider {
       outputTokens: response.usage?.output_tokens ?? null,
     };
   }
+}
+
+/** OpenAI reasoning families (gpt-5*, o1/o3/o4*), with or without a gateway prefix. */
+export function isReasoningModel(model: string): boolean {
+  const id = model.includes("/") ? model.split("/").pop()! : model;
+  return /^(gpt-5|o\d)/.test(id) && !/chat/.test(id);
 }
 
 let override: AIProvider | null = null;

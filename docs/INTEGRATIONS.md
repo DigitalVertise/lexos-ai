@@ -25,7 +25,7 @@ Two one-time steps in the Supabase dashboard:
 | Variable | Value |
 |---|---|
 | `OPENAI_API_KEY` | from platform.openai.com → API keys (type: Sensitive) |
-| `OPENAI_MODEL` | optional; default `gpt-5.4-mini`. For higher quality try `gpt-6.1-sol` (check the exact ID on OpenAI's models page). |
+| `OPENAI_MODEL` | optional; default `gpt-5-mini`. For higher quality try `gpt-6.1-sol` (check the exact ID on OpenAI's models page). |
 
 Requests use the Responses API with `store: false`. Until the key is set, the app shows "AI service not configured" and disables assistant runs — it never fakes answers.
 

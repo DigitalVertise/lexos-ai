@@ -76,7 +76,7 @@ export async function runAssistant(ws: Workspace, input: RunInput): Promise<RunR
 
   let result;
   try {
-    result = await aiProvider().complete({ system, input: prompt, maxOutputTokens: 4000 });
+    result = await aiProvider().complete({ system, input: prompt, maxOutputTokens: 8000 });
   } catch (err) {
     if (err instanceof AIUnavailableError) {
       return { ok: false, error: "The AI service is not configured yet. An administrator needs to add the OpenAI key." };

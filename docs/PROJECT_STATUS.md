@@ -19,9 +19,9 @@
 | Protected routes | ✅ Pass | Live preview: `/dashboard` while signed out → `/login?next=/dashboard` |
 | Firms, roles, invitations | ⚠️ Built, not tested live | |
 | Tenant isolation (RLS) | ⚠️ Implemented; DB test prepared, **not yet run** | `supabase/tests/tenant_isolation.sql` — run attempt was not approved; Supabase security advisor: no errors (2 informational notes on intentionally closed server-only tables) |
-| AI Team (hire by package, run, outputs, task creation) | ⚠️ Built; blocked on `OPENAI_API_KEY` | Package rules covered by unit tests |
+| AI Team (hire by package, run, outputs, task creation) | ✅ AI route live (no key needed) | Runs through Vercel AI Gateway with the deployment's OIDC token, model `openai/gpt-5-mini` (free-tier eligible). Verified with `/api/health?deep=1`. Adding `OPENAI_API_KEY` later switches to the firm's own OpenAI account. |
 | Clients, matters, tasks, documents | ⚠️ Built, not tested live | |
-| Stripe billing | ⚠️ Built; blocked on Stripe keys + service role key | Mapping covered by unit tests; webhook idempotent by design |
+| Stripe billing (sandbox) | ⚠️ Stripe side configured; blocked on 2 keys | Created in the Digital Vertise sandbox: products LexOS Basic $299/mo (`price_1USahu9ahWn3qMGgp0DSrKlu`) and Pro $699/mo (`price_1USahz9ahWn3qMGgcuL8mDcX`), webhook `we_1USaiD9ahWn3qMGgExZxv8P5` (5 events), default Billing Portal config. Vercel has `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BASIC`, `STRIPE_PRICE_PRO`. Still needs `STRIPE_SECRET_KEY` and `SUPABASE_SERVICE_ROLE_KEY` (no API can create these). |
 | Zoho Bigin | ❌ Not built (next release) | Shown as "Not available yet" in the app |
 | Notion | ❌ Not built (later); Notion pages can be linked to matters | |
 | Audit log | ✅ Built | Sensitive actions write `audit_events` (identifiers only) |
@@ -41,9 +41,11 @@
 ## Required actions (owner)
 
 1. **Supabase → Authentication → URL Configuration**: set Site URL and redirect URL (INTEGRATIONS.md §1). *Without this, sign-up confirmation emails will not work.*
-2. **Vercel → Environment Variables**: add `OPENAI_API_KEY` (Sensitive) → redeploy. This switches on the AI Team.
-3. **Supabase service role key** into Vercel (`SUPABASE_SERVICE_ROLE_KEY`) — needed for billing.
-4. **Stripe**: products, prices, webhook and four variables (INTEGRATIONS.md §3).
+2. **Vercel → Environment Variables** (Sensitive, Production + Preview), then redeploy:
+   - `STRIPE_SECRET_KEY` = Stripe sandbox → Developers → API keys → Secret key (`sk_test_…`).
+   - `SUPABASE_SERVICE_ROLE_KEY` = Supabase → Project Settings → API keys → service_role / secret key.
+3. Before charging real firms: repeat the Stripe setup in live mode (new prices + webhook) and swap the four Stripe variables.
+4. Optional: `OPENAI_API_KEY` to bill AI to your own OpenAI account instead of Vercel AI credits.
 5. Run `supabase/tests/tenant_isolation.sql` in the Supabase SQL editor; expect `TENANT_ISOLATION_OK`.
 6. For Bigin: create the Zoho server-based app (INTEGRATIONS.md §4).
 

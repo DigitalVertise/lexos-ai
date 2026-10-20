@@ -31,9 +31,9 @@ export async function GET(request: NextRequest) {
       const r = await aiProvider().complete({
         system: "You are a health check. Reply with exactly: OK",
         input: "Health check",
-        maxOutputTokens: 16,
+        maxOutputTokens: 400,
       });
-      body.aiCheck = { ok: /ok/i.test(r.text), model: r.model, ms: Date.now() - started };
+      body.aiCheck = { ok: /ok/i.test(r.text), model: r.model, ms: Date.now() - started, chars: r.text.length, outputTokens: r.outputTokens };
     } catch (err) {
       body.aiCheck = { ok: false, error: (err as Error).name, message: (err as Error).message.slice(0, 200) };
     }
