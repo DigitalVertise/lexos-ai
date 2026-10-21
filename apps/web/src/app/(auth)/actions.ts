@@ -67,6 +67,23 @@ export async function updatePassword(_: FormState, data: FormData): Promise<Form
   redirect("/dashboard");
 }
 
+/** Google / Apple sign-in and sign-up (same flow: new users land in onboarding via /dashboard). */
+export async function signInWithProvider(data: FormData) {
+  const provider = z.enum(["google", "apple"]).safeParse(data.get("provider"));
+  if (!provider.success) redirect("/login?error=oauth");
+  const next = safeNext(data.get("next"));
+  const supabase = await supabaseServer();
+  const { data: result, error } = await supabase.auth.signInWithOAuth({
+    provider: provider.data,
+    options: {
+      redirectTo: `${appUrl()}/auth/callback?next=${encodeURIComponent(next)}`,
+      ...(provider.data === "google" ? { queryParams: { prompt: "select_account" } } : {}),
+    },
+  });
+  if (error || !result.url) redirect("/login?error=oauth");
+  redirect(result.url);
+}
+
 export async function signOut() {
   const supabase = await supabaseServer();
   await supabase.auth.signOut();

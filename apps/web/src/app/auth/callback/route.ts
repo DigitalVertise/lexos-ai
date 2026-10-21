@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 
-/** Email confirmation and password-reset links land here (PKCE code exchange). */
+/** Email confirmation, password-reset and Google/Apple sign-in land here (PKCE code exchange). */
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const code = url.searchParams.get("code");
@@ -13,5 +13,6 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) return NextResponse.redirect(new URL(next, url.origin));
   }
-  return NextResponse.redirect(new URL("/login?error=link", url.origin));
+  const reason = url.searchParams.has("error") || url.searchParams.has("error_description") ? "oauth" : "link";
+  return NextResponse.redirect(new URL(`/login?error=${reason}`, url.origin));
 }
