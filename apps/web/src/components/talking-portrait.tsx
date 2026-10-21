@@ -24,7 +24,6 @@ export function TalkingPortrait({ src, anchor, level, className }: {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const img = new Image();
-    img.crossOrigin = "anonymous";
     img.src = src;
     let raf = 0;
     let open = 0;

@@ -17,10 +17,11 @@ import { matterRef, type AgentHire, type AiOutput, type DocumentRow, type Matter
 const READABLE = new Set(["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"]);
 
 export default async function AssistantPage({ params, searchParams }: {
-  params: Promise<{ id: string }>; searchParams: Promise<{ matter?: string }>;
+  params: Promise<{ id: string }>; searchParams: Promise<{ matter?: string; mode?: string }>;
 }) {
   const { id } = await params;
-  const { matter: matterParam } = await searchParams;
+  const { matter: matterParam, mode: modeParam } = await searchParams;
+  const initialMode = (["task", "chat", "voice", "avatar"] as const).find((m) => m === modeParam) ?? "task";
   const ws = await requireWorkspace();
   const { data: hire } = await ws.supabase.from("agent_hires").select("*").eq("id", id).eq("org_id", ws.org.id).maybeSingle<AgentHire>();
   if (!hire) notFound();
@@ -79,6 +80,7 @@ export default async function AssistantPage({ params, searchParams }: {
             )}
           </Card>
           <AgentConsole
+            initialMode={initialMode}
             hireId={hire.id}
             assistantName={hire.name}
             matter={selected ? { id: selected.id, ref: matterRef(selected) } : null}

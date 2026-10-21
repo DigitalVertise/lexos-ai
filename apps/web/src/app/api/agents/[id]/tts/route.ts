@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const res = await runtimeFetch("/v1/voice/tts", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: parsed.data.text, voice: voice.provider === "builtin" ? voice.id : null }),
-        timeoutMs: 90_000,
+        timeoutMs: 25_000,
       });
       return new Response(res.body, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Voice-Source": "lexos-neural" } });
     }
