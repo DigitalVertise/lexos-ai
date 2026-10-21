@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { FormState } from "@/components/form";
 import { appUrl } from "@/lib/env";
 import { supabaseServer } from "@/lib/supabase/server";
+import { enabledOAuthProviders } from "@/lib/oauth";
 
 const email = z.string().trim().toLowerCase().email("Enter a valid email address.");
 const password = z.string().min(10, "Use at least 10 characters.").max(128);
@@ -72,6 +73,8 @@ export async function signInWithProvider(data: FormData) {
   const provider = z.enum(["google", "apple"]).safeParse(data.get("provider"));
   if (!provider.success) redirect("/login?error=oauth");
   const next = safeNext(data.get("next"));
+  // Provider not switched on in Supabase yet: say so instead of showing a raw Supabase error page.
+  if (!(await enabledOAuthProviders()).includes(provider.data)) redirect(`/login?error=${provider.data}_unavailable`);
   const supabase = await supabaseServer();
   const { data: result, error } = await supabase.auth.signInWithOAuth({
     provider: provider.data,

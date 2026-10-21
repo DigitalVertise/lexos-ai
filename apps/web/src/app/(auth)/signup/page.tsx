@@ -3,12 +3,12 @@ import { ActionForm, SubmitButton } from "@/components/form";
 import { Card, Field, Input } from "@/components/ui";
 import { signUp } from "../actions";
 import { OAuthButtons } from "@/components/oauth-buttons";
-import { enabledOAuthProviders } from "@/lib/oauth";
+import { visibleOAuthProviders } from "@/lib/oauth";
 
 export const metadata = { title: "Start free trial" };
 
 export default async function SignupPage() {
-  const providers = await enabledOAuthProviders();
+  const providers = await visibleOAuthProviders();
   return (
     <Card className="p-6">
       <h1 className="font-display text-xl font-semibold">Start your free trial</h1>
