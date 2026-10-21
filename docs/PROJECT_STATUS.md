@@ -33,7 +33,7 @@
 ## Deployment
 
 - Vercel project `lexos-ai`: root directory `apps/web`, Node 24, functions in `fra1` (closest to the Supabase region).
-- Production URL: https://lexos-ai-digitalvertises-projects.vercel.app (public). Preview and per-deployment URLs require Vercel login.
+- Production URL: https://lexos.digitalvertise.com (custom domain, GoDaddy CNAME). Also reachable at https://lexos-ai-digitalvertises-projects.vercel.app — kept live (not redirected) because the Stripe webhook points there.
 - Preview of `b8df459` verified READY; promoted by pushing to `main`.
 - Production deployment `dpl_JCetCRVegyjHPGA2SLDLgfwHLQGw` (commit `b8df459`): READY. Verified publicly (no login wall): landing page with packages, `/signup` form, `/dashboard` redirects signed-out users to `/login`. Also reachable at https://lexos-ai-two.vercel.app.
 - **Rollback**: Vercel → Deployments → choose an earlier production deployment → *Promote to Production*. Database migrations are additive, so rolling back the app does not require a database rollback.
