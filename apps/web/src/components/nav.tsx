@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Briefcase, CheckSquare, Clapperboard, LayoutDashboard, Settings, Users } from "lucide-react";
+import { Bot, Briefcase, CheckSquare, Clapperboard, LayoutDashboard, LayoutGrid, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cx } from "./ui";
@@ -8,6 +8,7 @@ import { cx } from "./ui";
 const LINKS = [
   { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { href: "/assistants", label: "AI Team", Icon: Bot },
+  { href: "/workspace", label: "Workspace", Icon: LayoutGrid },
   { href: "/studio", label: "Avatar studio", Icon: Clapperboard },
   { href: "/matters", label: "Matters", Icon: Briefcase },
   { href: "/clients", label: "Clients", Icon: Users },

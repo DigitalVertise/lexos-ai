@@ -1,7 +1,9 @@
 import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "@/app/(auth)/actions";
+import { LiveChatLauncher } from "@/components/live-chat-launcher";
 import { NavLinks } from "@/components/nav";
+import { LIVECHAT_URL } from "@/lib/embeds";
 import { Notice } from "@/components/ui";
 import { switchFirm } from "@/lib/actions/firm";
 import { requireWorkspace } from "@/lib/auth";
@@ -86,6 +88,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <button className="text-sm text-muted" type="submit">Sign out ({ws.user.email})</button>
         </form>
       </main>
+      <LiveChatLauncher src={LIVECHAT_URL} label="Live assistant" />
     </div>
   );
 }

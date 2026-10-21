@@ -3,6 +3,8 @@ import { Hero } from "@/components/landing/hero";
 import { TrustStrip, HowItWorks, AiTeam, Features, Faq, FinalCta, Footer } from "@/components/landing/sections";
 import { WorkspaceSection } from "@/components/landing/dashboard-preview";
 import { Pricing } from "@/components/landing/pricing";
+import { LiveChatLauncher } from "@/components/live-chat-launcher";
+import { LIVECHAT_URL } from "@/lib/embeds";
 
 export default function Home() {
   return (
@@ -20,6 +22,7 @@ export default function Home() {
         <FinalCta />
       </main>
       <Footer />
+      <LiveChatLauncher src={LIVECHAT_URL} />
     </div>
   );
 }
