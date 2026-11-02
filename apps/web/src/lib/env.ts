@@ -36,6 +36,15 @@ export function env(): ServerEnv {
   const raw = Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== ""));
   // Vercel's Supabase integration names the public key differently; accept both.
   raw.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??= raw.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // The Vercel Supabase integration was installed with a custom prefix, so its
+  // service key arrives under a prefixed name. Use it only when the same
+  // integration points at this app's Supabase project.
+  const integrationPrefix = "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY_";
+  const integrationUrl = raw[`${integrationPrefix}SUPABASE_URL`]?.replace(/\/$/, "");
+  if (integrationUrl && integrationUrl === raw.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "")) {
+    raw.SUPABASE_SERVICE_ROLE_KEY ??=
+      raw[`${integrationPrefix}SUPABASE_SERVICE_ROLE_KEY`] ?? raw[`${integrationPrefix}SUPABASE_SECRET_KEY`];
+  }
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const fields = parsed.error.issues.map((i) => i.path.join(".")).join(", ");
