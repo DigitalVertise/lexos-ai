@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {
-      console.error("brevo send failed", { status: res.status, type: d.email_action_type });
+      const detail = (await res.text().catch(() => "")).slice(0, 300);
+      console.error("brevo send failed", { status: res.status, type: d.email_action_type, detail });
       return hookError(502, "Email delivery failed");
     }
   }
