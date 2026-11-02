@@ -24,6 +24,8 @@ CURATED_VOICES = [
     {"id": "ar-AE-FatimaNeural", "label": "Fatima (Arabic, UAE, female)"},
     {"id": "ar-EG-ShakirNeural", "label": "Shakir (Arabic, Egypt, male)"},
     {"id": "ar-EG-SalmaNeural", "label": "Salma (Arabic, Egypt, female)"},
+    {"id": "ar-SA-ZariyahNeural", "label": "Zariyah (Arabic, Saudi, female)"},
+    {"id": "ar-SA-HamedNeural", "label": "Hamed (Arabic, Saudi, male)"},
 ]
 _ALLOWED = {v["id"] for v in CURATED_VOICES}
 _ARABIC = re.compile(r"[؀-ۿ]")
