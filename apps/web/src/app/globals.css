@@ -160,9 +160,3 @@ details > summary::-webkit-details-marker { display: none; }
   .lift:hover { transform: none; }
 }
 
-/* Landing hero talking presenter */
-.ha-blink { transform-box: fill-box; transform-origin: center; animation: ha-blink 5.5s infinite; }
-@keyframes ha-blink { 0%, 95%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
-.ha-breathe { transform-origin: 200px 500px; animation: ha-breathe 6s ease-in-out infinite; }
-@keyframes ha-breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
-@media (prefers-reduced-motion: reduce) { .ha-blink, .ha-breathe { animation: none; } }
