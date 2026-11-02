@@ -1,7 +1,10 @@
 # Roadmap
 
+> **Mission (highest priority):** every tool LexOS depends on is available in-house or locally, with several interchangeable providers per capability. When one provider runs out of credits or fails, LexOS switches automatically to the next, with no visible drop in quality. See ARCHITECTURE.md → ADR-019.
+
 | Phase | Goal | Status |
 |---|---|---|
+| 0. Provider independence | One provider router per capability (LLM, TTS, STT, image, avatar, email) with automatic failover on 402/429/5xx; self-hosted fallbacks (Ollama/vLLM, Piper/XTTS, faster-whisper, SDXL/FLUX, MuseTalk); credit/health dashboard and low-credit alerts; quality evaluation before a provider joins a chain | **Top priority** |
 | 1. WhatsApp intake MVP | Intake agent, conflict screening, team commands, time logging, drafts, dashboard, Bigin mirror | ✅ Built |
 | 2. Production hardening | Migrations, RLS, team auth, templates, document intake, Next.js portal | Next |
 | 3. Knowledge & drafting | UAE legal RAG (federal, DIFC, ADGM), template library, Arabic drafting | Later |
