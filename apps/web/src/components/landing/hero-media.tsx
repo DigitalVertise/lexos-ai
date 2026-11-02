@@ -6,7 +6,7 @@ import { useCallback, useState, type ReactNode } from "react";
  * Hero "AI agent" panel. The poster image is always layered on top and only fades out once
  * the video fires "playing". With no URL, or on error, the poster stays.
  */
-export function HeroMedia({ videoUrl, poster, alt, children }: { videoUrl?: string; poster: string; alt: string; children?: ReactNode }) {
+export function HeroMedia({ videoUrl, poster, alt, stage, children }: { videoUrl?: string; poster: string; alt: string; stage?: ReactNode; children?: ReactNode }) {
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -40,13 +40,15 @@ export function HeroMedia({ videoUrl, poster, alt, children }: { videoUrl?: stri
           onError={() => setFailed(true)}
         />
       )}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {stage && !showVideo ? stage : (
+      /* eslint-disable-next-line @next/next/no-img-element */
       <img
         src={poster}
         alt={alt}
         className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${playing ? "opacity-0" : "opacity-100"}`}
         draggable={false}
       />
+      )}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg/50 via-transparent to-transparent" />
       {children}
     </div>
