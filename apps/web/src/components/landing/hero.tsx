@@ -47,7 +47,7 @@ export function Hero() {
               </div>
             </div>
 
-            <div className="pointer-events-none absolute right-3 top-[40%] hidden sm:right-4 sm:block">
+            <div className="pointer-events-none absolute right-3 top-[58%] hidden sm:right-4 sm:block">
               <div className="float-b glass flex items-center gap-3 rounded-2xl px-3 py-2.5 shadow-lg">
                 <span className="grid h-7 w-7 place-items-center rounded-lg bg-ok/15 text-ok"><Phone size={15} /></span>
                 <div>
