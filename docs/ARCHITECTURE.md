@@ -81,6 +81,22 @@ Browser ──► Supabase Storage (direct upload, storage RLS: own firm's folde
 ### ADR-018: Branding detection
 - **Decision:** the server fetches the firm's public homepage (https only, DNS checked against private ranges on every redirect, size and time capped) and suggests logos (logo images, touch icons, og:image) and brand colours (theme-color, CSS). The firm reviews and edits everything. Colours apply as CSS variables, with readable text colour computed by WCAG contrast.
 
+### ADR-019: Provider independence and automatic failover (mission-level principle)
+- **Problem:** the product stops working when one vendor runs out of credits or goes down. Examples from 2 November 2026: ElevenLabs had 0 credits, Higgsfield needed a paid plan, and Hugging Face image generation was blocked.
+- **Decision:** every capability (LLM chat, speech-to-text, text-to-speech, image, avatar/video, email, payments) runs behind one internal interface with an ordered **provider chain**. On quota, billing, rate-limit or outage errors (HTTP 402/429/5xx, "insufficient credits"), the router retries the next provider automatically and logs the switch. Self-hosted or free options are always in the chain, so LexOS never depends on a single paid vendor.
+- **Target chains (in-house first where quality is equal):**
+  | Capability | Chain |
+  |---|---|
+  | LLM | LiteLLM router: Vercel AI Gateway → OpenAI → Anthropic → OpenRouter (Qwen/DeepSeek) → self-hosted (Ollama/vLLM) |
+  | Text-to-speech | ElevenLabs → Microsoft neural (edge-tts, runtime) → self-hosted Piper/XTTS → browser voice |
+  | Speech-to-text | OpenAI Whisper API → self-hosted faster-whisper → browser recognition |
+  | Images / portraits | Higgsfield/OpenAI → Hugging Face FLUX → self-hosted SDXL/FLUX → bundled assets |
+  | Avatar video | HeyGen/D-ID/Simli → LeapTalk/MuseTalk (self-hosted) → built-in TalkingPortrait |
+  | Email | Custom SMTP (Brevo) → second SMTP (Resend/SES) → Supabase built-in |
+- **Quality guard:** providers in one chain must pass the same evaluation set (voice MOS sample, prompt-quality checks) before they are added, so failover never shows a visibly worse result. Each output records which provider produced it.
+- **Operations:** a provider health and credit dashboard; an alert at 20% remaining credit; secrets per provider in Vercel/Render env vars; switching order is configuration, not code.
+- **Status:** the TTS chain (Microsoft neural → browser) and the LLM fallback (runtime → direct gateway) exist today. The rest is Phase 0 of the roadmap.
+
 ## Data model (system of record)
 
 | Entity | Table | Source of truth | Notes |
