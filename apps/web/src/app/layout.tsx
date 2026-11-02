@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     title: "LexOS AI — AI legal team for law firms",
     description: "Hire AI legal assistants for intake, drafting, client communications, billing, contract review and research.",
     type: "website",
-    images: ["/hero-agent.svg"],
+    images: ["/presenters/layla.webp"],
   },
 };
 

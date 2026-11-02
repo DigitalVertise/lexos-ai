@@ -28,5 +28,5 @@ export async function enabledOAuthProviders(): Promise<OAuthProvider[]> {
 /** Buttons to show: Google always (it is the primary option); Apple only once enabled. */
 export async function visibleOAuthProviders(): Promise<OAuthProvider[]> {
   const enabled = await enabledOAuthProviders();
-  return OAUTH_PROVIDERS.filter((p) => p === "google" || enabled.includes(p));
+  return OAUTH_PROVIDERS.filter((p) => enabled.includes(p));
 }

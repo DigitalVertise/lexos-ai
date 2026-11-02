@@ -36,7 +36,7 @@ export function Hero() {
         </div>
 
         <div className="hero-in mx-auto w-full max-w-sm sm:max-w-md lg:max-w-none" style={{ "--d": ".2s" } as React.CSSProperties}>
-          <HeroMedia videoUrl={videoUrl} poster="/hero-agent.svg" alt="Illustration of a LexOS AI legal assistant drafting a document" stage={<HeroAvatar />}>
+          <HeroMedia videoUrl={videoUrl} poster="/presenters/layla.webp" alt="Layla, a LexOS AI legal assistant" stage={<HeroAvatar />}>
             <div className="absolute left-3 right-12 top-3 sm:left-5 sm:top-5 sm:right-auto sm:w-64">
               <div className="float-a glass rounded-2xl p-3 shadow-lg">
                 <div className="flex items-center gap-2 text-sm font-medium">
