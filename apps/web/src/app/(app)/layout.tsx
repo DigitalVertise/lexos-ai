@@ -42,7 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <img src={ws.org.logo_url} alt={ws.org.name} className="h-9 max-w-40 object-contain" referrerPolicy="no-referrer" />
             )
           ) : (
-            <Link href="/dashboard" className="font-display text-lg font-semibold tracking-tight">Lex<span className="text-gold">OS</span> AI</Link>
+            <Link href="/dashboard" className="font-display text-lg font-semibold tracking-tight">Lex<span className="text-accent">OS</span> AI</Link>
           )}
           {ws.memberships.length > 1 ? (
             <form action={switchFirm} className="flex items-center md:mt-3">

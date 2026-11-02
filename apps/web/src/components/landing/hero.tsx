@@ -1,5 +1,6 @@
 import { ArrowRight, FileText, Phone, ShieldCheck, Sparkles } from "lucide-react";
 import { LButton } from "./buttons";
+import { HeroAvatar } from "./hero-avatar";
 import { HeroMedia } from "./hero-media";
 
 const WAVE = [0, 0.15, 0.3, 0.1, 0.45, 0.2, 0.35, 0.05, 0.25];
@@ -35,7 +36,7 @@ export function Hero() {
         </div>
 
         <div className="hero-in mx-auto w-full max-w-sm sm:max-w-md lg:max-w-none" style={{ "--d": ".2s" } as React.CSSProperties}>
-          <HeroMedia videoUrl={videoUrl} poster="/hero-agent.svg" alt="Illustration of a LexOS AI legal assistant drafting a document">
+          <HeroMedia videoUrl={videoUrl} poster="/hero-agent.svg" alt="Illustration of a LexOS AI legal assistant drafting a document" stage={<HeroAvatar />}>
             <div className="absolute left-3 right-12 top-3 sm:left-5 sm:top-5 sm:right-auto sm:w-64">
               <div className="float-a glass rounded-2xl p-3 shadow-lg">
                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -46,7 +47,7 @@ export function Hero() {
               </div>
             </div>
 
-            <div className="absolute right-3 top-[44%] sm:right-5">
+            <div className="pointer-events-none absolute right-3 top-[58%] hidden sm:right-4 sm:block">
               <div className="float-b glass flex items-center gap-3 rounded-2xl px-3 py-2.5 shadow-lg">
                 <span className="grid h-7 w-7 place-items-center rounded-lg bg-ok/15 text-ok"><Phone size={15} /></span>
                 <div>

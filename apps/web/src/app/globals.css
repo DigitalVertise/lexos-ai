@@ -159,3 +159,4 @@ details > summary::-webkit-details-marker { display: none; }
   .marquee-track { animation: none; flex-wrap: wrap; width: auto; justify-content: center; }
   .lift:hover { transform: none; }
 }
+

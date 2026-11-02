@@ -19,7 +19,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
 
   return (
     <div className="mx-auto max-w-md px-4 py-10">
-      <Link href="/" className="font-display mb-8 block text-center text-xl font-semibold">Lex<span className="text-gold">OS</span> AI</Link>
+      <Link href="/" className="font-display mb-8 block text-center text-xl font-semibold">Lex<span className="text-accent">OS</span> AI</Link>
       {error && <div className="mb-4"><Notice tone="bad">That invitation is no longer valid.</Notice></div>}
       {portals.length > 0 && (
         <Card className="mb-4 p-6">
