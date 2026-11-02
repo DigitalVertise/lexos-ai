@@ -1,15 +1,16 @@
 import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "@/app/(auth)/actions";
-import { LiveChatLauncher } from "@/components/live-chat-launcher";
+import { FloatingAssistant } from "@/components/floating-assistant";
 import { NavLinks } from "@/components/nav";
-import { LIVECHAT_URL } from "@/lib/embeds";
 import { Notice } from "@/components/ui";
 import { switchFirm } from "@/lib/actions/firm";
 import { requireWorkspace } from "@/lib/auth";
 import { brandStyle, themeAttr } from "@/lib/branding";
 import { daysUntil } from "@/lib/dates";
+import { integrationStatus } from "@/lib/env";
 import { planState } from "@/lib/plans";
+import type { AgentHire } from "@/lib/types";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ws = await requireWorkspace();
@@ -17,6 +18,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const trialDays = daysUntil(ws.org.trial_ends_at);
   const initial = (ws.user.email ?? "?").slice(0, 1).toUpperCase();
   const planLabel = state.active ? state.plan.name : "Inactive";
+  const { data: hires } = await ws.supabase.from("agent_hires").select("id, name, status, avatar")
+    .eq("org_id", ws.org.id).eq("status", "active").order("created_at").limit(20)
+    .returns<Pick<AgentHire, "id" | "name" | "status" | "avatar">[]>();
+  const assistants = (hires ?? []).map((h) => ({
+    id: h.id, name: h.name, voice: h.avatar?.voice ?? null, anchor: h.avatar?.anchor ?? null,
+    portraitUrl: h.avatar?.portrait_path ? `/api/agents/${h.id}/portrait?v=${encodeURIComponent(h.avatar.portrait_path)}` : null,
+  }));
+  const aiReady = integrationStatus().ai || integrationStatus().runtime;
 
   return (
     <div data-theme={themeAttr(ws.org.theme)} style={brandStyle(ws.org)} className="min-h-dvh bg-bg text-ink md:grid md:grid-cols-[248px_1fr]">
@@ -88,7 +97,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <button className="text-sm text-muted" type="submit">Sign out ({ws.user.email})</button>
         </form>
       </main>
-      <LiveChatLauncher src={LIVECHAT_URL} label="Live assistant" />
+      <FloatingAssistant agents={assistants} disabledReason={
+        !aiReady ? "The AI service is not configured yet." : !state.active ? "AI assistants are paused until a package is active." : null
+      } />
     </div>
   );
 }
