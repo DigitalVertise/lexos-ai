@@ -68,6 +68,15 @@ Each firm connects its own Notion workspace with an **internal integration** —
 
 Then on any matter: **Attach a Notion page**. Assistants read attached Notion pages (headings, lists, to-dos, tables; two levels of nesting) as context, within the same per-run document limits.
 
+## 6. Workspace copilot (CopilotKit)
+
+No setup needed: it uses the same AI route as the assistants (OpenAI key or Vercel AI Gateway).
+
+- **What it is:** the "LexOS Copilot" button at the bottom-left of every workspace page (the AI team launcher stays bottom-right). It knows the current page, the firm's hired assistants and its 30 most recent open matters and clients, and can open pages and records. It cannot create, edit or delete anything.
+- **How it runs:** open-source CopilotKit, self-hosted at `/api/copilotkit` (no CopilotKit Cloud, no extra key). Same sign-in, package check and per-user rate limit as the assistants; chat threads are scoped to the signed-in user.
+- **Telemetry:** CopilotKit's runtime telemetry is off by default (`COPILOTKIT_TELEMETRY_DISABLED=true`).
+- **Not yet:** copilot replies don't count toward the monthly assistant-task quota.
+
 ## Recovery
 
 | Symptom | Fix |

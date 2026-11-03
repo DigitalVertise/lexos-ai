@@ -3,6 +3,7 @@ import Link from "next/link";
 import { signOut } from "@/app/(auth)/actions";
 import { FloatingAssistant } from "@/components/floating-assistant";
 import { NavLinks } from "@/components/nav";
+import { WorkspaceCopilot, type CopilotWorkspace } from "@/components/workspace-copilot";
 import { Notice } from "@/components/ui";
 import { switchFirm } from "@/lib/actions/firm";
 import { requireWorkspace } from "@/lib/auth";
@@ -26,6 +27,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     portraitUrl: h.avatar?.portrait_path ? `/api/agents/${h.id}/portrait?v=${encodeURIComponent(h.avatar.portrait_path)}` : null,
   }));
   const aiReady = integrationStatus().ai || integrationStatus().runtime;
+  // Workspace copilot: a short, RLS-scoped list so it can find and open records by name.
+  const [{ data: matters }, { data: clients }] = integrationStatus().ai && state.active
+    ? await Promise.all([
+        ws.supabase.from("matters").select("id, number, title, status").eq("org_id", ws.org.id)
+          .neq("status", "closed").order("updated_at", { ascending: false }).limit(30)
+          .returns<CopilotWorkspace["matters"]>(),
+        ws.supabase.from("clients").select("id, name").eq("org_id", ws.org.id)
+          .order("created_at", { ascending: false }).limit(30)
+          .returns<CopilotWorkspace["clients"]>(),
+      ])
+    : [{ data: [] }, { data: [] }];
+  const copilotWorkspace: CopilotWorkspace = {
+    firmName: ws.org.name, role: ws.role, planLabel,
+    assistants: assistants.map(({ id, name }) => ({ id, name })),
+    matters: matters ?? [], clients: clients ?? [],
+  };
 
   return (
     <div data-theme={themeAttr(ws.org.theme)} style={brandStyle(ws.org)} className="min-h-dvh bg-bg text-ink md:grid md:grid-cols-[248px_1fr]">
@@ -99,6 +116,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </main>
       <FloatingAssistant agents={assistants} disabledReason={
         !aiReady ? "The AI service is not configured yet." : !state.active ? "AI assistants are paused until a package is active." : null
+      } />
+      <WorkspaceCopilot workspace={copilotWorkspace} disabledReason={
+        !integrationStatus().ai ? "The AI service is not configured yet." : !state.active ? "AI is paused until a package is active." : null
       } />
     </div>
   );
