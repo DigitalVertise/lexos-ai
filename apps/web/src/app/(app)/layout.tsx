@@ -6,7 +6,9 @@ import { NavLinks } from "@/components/nav";
 import { WorkspaceCopilot, type CopilotWorkspace } from "@/components/workspace-copilot";
 import { Notice } from "@/components/ui";
 import { switchFirm } from "@/lib/actions/firm";
-import { requireWorkspace } from "@/lib/auth";
+import { ADMIN_ROLES, hasRole, requireWorkspace } from "@/lib/auth";
+import { CATALOG } from "@/lib/agents/catalog";
+import { PRESENTERS } from "@/lib/presenters";
 import { brandStyle, themeAttr } from "@/lib/branding";
 import { daysUntil } from "@/lib/dates";
 import { integrationStatus } from "@/lib/env";
@@ -19,16 +21,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const trialDays = daysUntil(ws.org.trial_ends_at);
   const initial = (ws.user.email ?? "?").slice(0, 1).toUpperCase();
   const planLabel = state.active ? state.plan.name : "Inactive";
-  const { data: hires } = await ws.supabase.from("agent_hires").select("id, name, status, avatar")
+  const { data: hires } = await ws.supabase.from("agent_hires").select("id, name, status, avatar, agent_key")
     .eq("org_id", ws.org.id).eq("status", "active").order("created_at").limit(20)
-    .returns<Pick<AgentHire, "id" | "name" | "status" | "avatar">[]>();
+    .returns<Pick<AgentHire, "id" | "name" | "status" | "avatar" | "agent_key">[]>();
   const assistants = (hires ?? []).map((h) => ({
     id: h.id, name: h.name, voice: h.avatar?.voice ?? null, anchor: h.avatar?.anchor ?? null,
     portraitUrl: h.avatar?.portrait_path ? `/api/agents/${h.id}/portrait?v=${encodeURIComponent(h.avatar.portrait_path)}` : null,
   }));
   const aiReady = integrationStatus().ai || integrationStatus().runtime;
   // Workspace copilot: a short, RLS-scoped list so it can find and open records by name.
-  const [{ data: matters }, { data: clients }] = integrationStatus().ai && state.active
+  const [{ data: matters }, { data: clients }, { count: teamSize }] = integrationStatus().ai && state.active
     ? await Promise.all([
         ws.supabase.from("matters").select("id, number, title, status").eq("org_id", ws.org.id)
           .neq("status", "closed").order("updated_at", { ascending: false }).limit(30)
@@ -36,12 +38,32 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         ws.supabase.from("clients").select("id, name").eq("org_id", ws.org.id)
           .order("created_at", { ascending: false }).limit(30)
           .returns<CopilotWorkspace["clients"]>(),
+        ws.supabase.from("memberships").select("user_id", { count: "exact", head: true }).eq("org_id", ws.org.id),
       ])
-    : [{ data: [] }, { data: [] }];
+    : [{ data: [] }, { data: [] }, { count: 0 }];
+  const hiredKeys = new Set((hires ?? []).map((h) => h.agent_key));
+  // The copilot speaks as a hired assistant with a portrait; otherwise as a LexOS presenter (device voice).
+  const faceHire = assistants.find((a) => a.portraitUrl);
+  const copilotFace: CopilotWorkspace["face"] = faceHire
+    ? { hireId: faceHire.id, name: faceHire.name, portraitUrl: faceHire.portraitUrl!, anchor: faceHire.anchor, voice: faceHire.voice }
+    : { hireId: null, name: PRESENTERS[0].name.en, portraitUrl: PRESENTERS[0].src, anchor: PRESENTERS[0].anchor, voice: null };
   const copilotWorkspace: CopilotWorkspace = {
     firmName: ws.org.name, role: ws.role, planLabel,
     assistants: assistants.map(({ id, name }) => ({ id, name })),
     matters: matters ?? [], clients: clients ?? [],
+    isAdmin: hasRole(ws, ADMIN_ROLES),
+    setup: {
+      firmDetails: Boolean(ws.org.default_jurisdiction),
+      branding: Boolean(ws.org.logo_url || ws.org.brand_primary),
+      portalLive: Boolean(ws.org.portal_enabled),
+      teamSize: teamSize ?? 1,
+      assistantsHired: assistants.length,
+      hasClients: (clients ?? []).length > 0,
+      hasMatters: (matters ?? []).length > 0,
+    },
+    catalog: CATALOG.map((a) => ({ key: a.key, name: a.name, tier: a.tier, hired: hiredKeys.has(a.key) })),
+    portalSlug: ws.org.portal_slug ?? null,
+    face: copilotFace,
   };
 
   return (
@@ -117,7 +139,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <FloatingAssistant agents={assistants} disabledReason={
         !aiReady ? "The AI service is not configured yet." : !state.active ? "AI assistants are paused until a package is active." : null
       } />
-      <WorkspaceCopilot workspace={copilotWorkspace} disabledReason={
+      <WorkspaceCopilot workspace={copilotWorkspace} dark={ws.org.theme !== "light"} disabledReason={
         !integrationStatus().ai ? "The AI service is not configured yet." : !state.active ? "AI is paused until a package is active." : null
       } />
     </div>
