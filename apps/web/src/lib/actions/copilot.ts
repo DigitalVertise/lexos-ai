@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
-import { requireWorkspace } from "@/lib/auth";
+import { ADMIN_ROLES, hasRole, requireWorkspace } from "@/lib/auth";
+import { hireAssistant } from "./assistants";
+import { detectFirmBranding, saveBranding, savePortalSettings } from "./branding";
+import { inviteMember, updateFirm } from "./firm";
 import { createTask } from "./tasks";
 
 /**
@@ -11,6 +14,11 @@ import { createTask } from "./tasks";
  * user taps Confirm on the copilot's card, as the signed-in user: same
  * validation, row-level security, firm scoping and audit log as the forms.
  * They return a result for the copilot to read instead of redirecting.
+ *
+ * Admin changes (firm settings, team, assistants, branding, client portal)
+ * reuse the existing settings actions, which refuse anyone who is not an
+ * owner or admin of the firm: the copilot never has more rights than the
+ * person using it.
  */
 export type CopilotResult = { ok: true; message: string; id?: string; href?: string } | { ok: false; error: string };
 
@@ -102,4 +110,133 @@ export async function copilotSetMatterStatus(input: z.input<typeof statusInput>)
   revalidatePath(`/matters/${row.id}`);
   revalidatePath("/matters");
   return { ok: true, message: `"${row.title}" is now ${parsed.data.status.replace("_", " ")}.`, href: `/matters/${row.id}` };
+}
+
+// ── Admin: firm setup, team, assistants, branding, client portal ────────────
+
+const ADMIN_ONLY = "Only owners and admins can change firm settings. Ask an admin of your firm.";
+
+function formOf(values: Record<string, string | string[] | undefined>): FormData {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(values)) {
+    if (Array.isArray(v)) v.forEach((x) => form.append(k, x));
+    else if (v !== undefined) form.set(k, v);
+  }
+  return form;
+}
+
+/** Settings actions that redirect on success: turn the redirect into a result. */
+function redirectTarget(err: unknown): string | null {
+  const digest = (err as { digest?: unknown })?.digest;
+  if (typeof digest !== "string" || !digest.startsWith("NEXT_REDIRECT")) return null;
+  return digest.split(";")[2] ?? "/";
+}
+
+const firmInput = z.object({
+  name: z.string().trim().min(2).max(200).optional(),
+  defaultJurisdiction: z.string().trim().max(100).optional(),
+});
+
+export async function copilotUpdateFirm(input: z.input<typeof firmInput>): Promise<CopilotResult> {
+  const parsed = firmInput.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+  const ws = await requireWorkspace();
+  if (!hasRole(ws, ADMIN_ROLES)) return fail(ADMIN_ONLY);
+  const state = await updateFirm(null, formOf({
+    name: parsed.data.name ?? ws.org.name,
+    default_jurisdiction: parsed.data.defaultJurisdiction ?? ws.org.default_jurisdiction ?? undefined,
+  }));
+  if (state?.error) return fail(state.error);
+  return { ok: true, message: "Firm settings saved.", href: "/settings" };
+}
+
+const inviteInput = z.object({ email: z.string().trim().email(), role: z.enum(["admin", "lawyer", "staff"]) });
+
+export async function copilotInviteMember(input: z.input<typeof inviteInput>): Promise<CopilotResult> {
+  const parsed = inviteInput.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+  const state = await inviteMember(null, formOf(parsed.data));
+  if (state?.error) return fail(state.error);
+  return { ok: true, message: state?.ok ?? "Invitation created.", href: "/settings" };
+}
+
+const hireInput = z.object({
+  agentKey: z.string().regex(/^[a-z_]{3,40}$/),
+  name: z.string().trim().min(2).max(80).optional(),
+  instructions: z.string().trim().max(4000).optional(),
+});
+
+export async function copilotHireAssistant(input: z.input<typeof hireInput>): Promise<CopilotResult> {
+  const parsed = hireInput.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+  try {
+    const state = await hireAssistant(null, formOf({
+      agent_key: parsed.data.agentKey, name: parsed.data.name, instructions: parsed.data.instructions,
+    }));
+    if (state?.error) return fail(state.error);
+    return { ok: true, message: "Assistant hired.", href: "/assistants" };
+  } catch (err) {
+    const href = redirectTarget(err);
+    if (!href) throw err;
+    return { ok: true, message: "Assistant hired and ready on your AI team.", href };
+  }
+}
+
+const hexColour = z.string().trim().regex(/^#[0-9a-fA-F]{6}$/);
+const brandingInput = z.object({
+  website: z.string().trim().max(300).optional(),
+  primary: hexColour.optional(),
+  accent: hexColour.optional(),
+  theme: z.enum(["light", "dark", "auto"]).optional(),
+});
+
+export async function copilotUpdateBranding(input: z.input<typeof brandingInput>): Promise<CopilotResult> {
+  const parsed = brandingInput.safeParse(input);
+  if (!parsed.success) return fail("Colours must look like #1d3a5f.");
+  const ws = await requireWorkspace();
+  if (!hasRole(ws, ADMIN_ROLES)) return fail(ADMIN_ONLY);
+  const b = parsed.data;
+  // saveBranding replaces every field, so start from what the firm has now.
+  const state = await saveBranding(null, formOf({
+    website: b.website ?? ws.org.website_url ?? undefined,
+    logo: ws.org.logo_url ?? undefined,
+    primary: b.primary ?? ws.org.brand_primary ?? undefined,
+    accent: b.accent ?? ws.org.brand_accent ?? undefined,
+    theme: b.theme ?? ws.org.theme ?? "auto",
+    swatch: ws.org.brand_colors ?? [],
+  }));
+  if (state?.error) return fail(state.error);
+  return { ok: true, message: "Branding saved.", href: "/settings/branding" };
+}
+
+const detectInput = z.object({ website: z.string().trim().min(3).max(300) });
+
+export async function copilotDetectBranding(input: z.input<typeof detectInput>): Promise<CopilotResult> {
+  const parsed = detectInput.safeParse(input);
+  if (!parsed.success) return fail("Enter the firm's website.");
+  const state = await detectFirmBranding(null, formOf({ website: parsed.data.website }));
+  if (state?.error) return fail(state.error);
+  return { ok: true, message: state?.ok ?? "Website read. Review the logo and colours.", href: "/settings/branding" };
+}
+
+const portalInput = z.object({
+  enabled: z.boolean().optional(),
+  slug: z.string().trim().toLowerCase().optional(),
+  welcome: z.string().trim().max(600).optional(),
+});
+
+export async function copilotUpdatePortal(input: z.input<typeof portalInput>): Promise<CopilotResult> {
+  const parsed = portalInput.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+  const ws = await requireWorkspace();
+  if (!hasRole(ws, ADMIN_ROLES)) return fail(ADMIN_ONLY);
+  const p = parsed.data;
+  const slug = p.slug ?? ws.org.portal_slug;
+  if (!slug) return fail("Choose a portal address first (letters, numbers or dashes).");
+  const enabled = p.enabled ?? ws.org.portal_enabled;
+  const state = await savePortalSettings(null, formOf({
+    slug, enabled: enabled ? "on" : undefined, welcome: p.welcome ?? ws.org.portal_welcome ?? undefined,
+  }));
+  if (state?.error) return fail(state.error);
+  return { ok: true, message: state?.ok ?? "Portal saved.", href: "/settings/branding" };
 }

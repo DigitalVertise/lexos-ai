@@ -1,11 +1,17 @@
 "use client";
 
-import { CopilotKit, CopilotPopup, useAgentContext, useConfigureSuggestions, useFrontendTool, useHumanInTheLoop } from "@copilotkit/react-core/v2";
+import { CopilotKit, CopilotPopup, useAgent, useAgentContext, useConfigureSuggestions, useFrontendTool, useHumanInTheLoop } from "@copilotkit/react-core/v2";
 import "@copilotkit/react-core/v2/styles.css";
+import { Sparkles, Volume2, VolumeX, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Speaker } from "./speaker";
+import { TalkingPortrait } from "./talking-portrait";
 import { z } from "zod";
-import { copilotCreateClient, copilotCreateMatter, copilotCreateTask, copilotSetMatterStatus, type CopilotResult } from "@/lib/actions/copilot";
+import {
+  copilotCreateClient, copilotCreateMatter, copilotCreateTask, copilotDetectBranding, copilotHireAssistant,
+  copilotInviteMember, copilotSetMatterStatus, copilotUpdateBranding, copilotUpdateFirm, copilotUpdatePortal, type CopilotResult,
+} from "@/lib/actions/copilot";
 
 /**
  * Workspace copilot (CopilotKit, self-hosted runtime at /api/copilotkit).
@@ -22,6 +28,13 @@ export interface CopilotWorkspace {
   assistants: { id: string; name: string }[];
   matters: { id: string; number: number; title: string; status: string }[];
   clients: { id: string; name: string }[];
+  isAdmin: boolean;
+  /** Onboarding checklist, computed on the server. */
+  setup: { firmDetails: boolean; branding: boolean; portalLive: boolean; teamSize: number; assistantsHired: number; hasClients: boolean; hasMatters: boolean };
+  catalog: { key: string; name: string; tier: string; hired: boolean }[];
+  portalSlug: string | null;
+  /** The copilot's face and voice: a hired assistant's portrait, or a LexOS presenter. */
+  face: { hireId: string | null; name: string; portraitUrl: string; anchor: { x: number; y: number } | null; voice: string | null };
 }
 
 const PAGES = {
@@ -44,7 +57,9 @@ const GUIDE = `You are the LexOS AI workspace copilot for a law firm. Help the s
 - LexOS areas: Dashboard (firm overview), AI Team (hire and run AI legal assistants: intake, drafting, client communications, billing, contract review, litigation support, research, deadlines), Avatar studio (video avatars for assistants), Matters, Clients, Tasks, Settings (team, billing and packages, branding, client portal).
 - To take the user somewhere, call navigate_to_page, open_matter or open_client. Only use ids from the workspace context; never invent one. If several records fit, ask which one.
 - You can add a task, add a client, open a new matter, or change a matter's status with the matching tool. The user sees a card and must tap Confirm; if they cancel, accept it and don't retry. Ask for anything required you don't know (e.g. which client a new matter is for) instead of guessing. Dates are YYYY-MM-DD, Dubai time.
-- You cannot delete anything, edit other fields, assign people, or touch billing, team or settings: point the user to the right page. For legal drafting and analysis, point them to the right AI assistant.
+- You are also the firm's onboarding guide and portal admin. When "setup" in the workspace context shows steps not done, offer the next one in one line (order: firm details, branding, hire assistants, invite team, add first client and matter, switch on the client portal) and do it with the user.
+- Admin changes (only if userIsAdmin is true): update firm name or default jurisdiction, read branding from the firm's website, set brand colours or theme, invite a team member, hire an assistant from the catalog, and set up the client portal (address, on/off, welcome text). If the user is not an admin, explain that an owner or admin must do it.
+- You cannot delete or remove anything, change billing or packages, or edit the app's code: point the user to the right page (billing: /settings#billing). For legal drafting and analysis, point them to the right AI assistant.
 - You are not a lawyer and do not give legal advice. Never invent laws, cases or deadlines.
 - Keep answers short. Reply in the user's language (English or Arabic).`;
 
@@ -83,26 +98,26 @@ function ConfirmCard<T>({ props, title, lines, run }: {
   }
 
   return (
-    <div className="my-2 rounded-xl border border-line bg-surface-2/60 p-3 text-sm">
+    <div className="my-2 rounded-xl border lx-border lx-surface2 p-3 text-sm">
       <p className="font-semibold">{title}</p>
       <dl className="mt-2 space-y-1">
         {lines.filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => (
-          <div key={k} className="flex gap-2"><dt className="w-20 shrink-0 text-muted">{k}</dt><dd className="min-w-0 break-words">{v}</dd></div>
+          <div key={k} className="flex gap-2"><dt className="w-20 shrink-0 lx-muted">{k}</dt><dd className="min-w-0 break-words">{v}</dd></div>
         ))}
       </dl>
       {outcome ? (
-        <p className={`mt-3 ${outcome.ok ? "text-ok" : "text-muted"}`}>
+        <p className={`mt-3 ${outcome.ok ? "text-ok" : "lx-muted"}`}>
           {outcome.ok ? outcome.message : outcome.error}
-          {outcome.ok && outcome.href && <> · <button type="button" className="text-accent underline" onClick={() => router.push(outcome.href!)}>Open</button></>}
+          {outcome.ok && outcome.href && <> · <button type="button" className="lx-accent-text underline" onClick={() => router.push(outcome.href!)}>Open</button></>}
         </p>
       ) : done ? (
-        <p className="mt-3 text-muted">{props.result ? "Done." : ""}</p>
+        <p className="mt-3 lx-muted">{props.result ? "Done." : ""}</p>
       ) : (
         <div className="mt-3 flex gap-2">
           <button type="button" disabled={busy || props.status !== "executing"} onClick={confirm}
-            className="rounded-full bg-accent px-4 py-1.5 font-semibold text-accent-ink disabled:opacity-50">{busy ? "Saving…" : "Confirm"}</button>
+            className="rounded-full lx-accent-bg px-4 py-1.5 font-semibold disabled:opacity-50">{busy ? "Saving…" : "Confirm"}</button>
           <button type="button" disabled={busy || props.status !== "executing"} onClick={cancel}
-            className="rounded-full border border-line px-4 py-1.5 text-muted disabled:opacity-50">Cancel</button>
+            className="rounded-full border lx-border px-4 py-1.5 lx-muted disabled:opacity-50">Cancel</button>
         </div>
       )}
     </div>
@@ -184,6 +199,93 @@ function CopilotChanges({ workspace }: { workspace: CopilotWorkspace }) {
   return null;
 }
 
+const firmSchema = z.object({
+  name: z.string().optional().describe("New firm name"),
+  defaultJurisdiction: z.string().optional().describe("e.g. UAE - Dubai, DIFC, Egypt"),
+});
+const inviteSchema = z.object({ email: z.string(), role: z.enum(["admin", "lawyer", "staff"]) });
+const hireSchema = z.object({
+  agentKey: z.string().describe("Key from assistantCatalog, or 'custom' (Pro) with name and instructions"),
+  name: z.string().optional(),
+  instructions: z.string().optional(),
+});
+const brandingSchema = z.object({
+  website: z.string().optional(),
+  primary: z.string().optional().describe("Hex colour like #1d3a5f"),
+  accent: z.string().optional().describe("Hex colour like #1877f2"),
+  theme: z.enum(["light", "dark", "auto"]).optional(),
+});
+const detectSchema = z.object({ website: z.string().describe("The firm's website, e.g. alnoorlaw.ae") });
+const portalSchema = z.object({
+  enabled: z.boolean().optional(),
+  slug: z.string().optional().describe("Portal address: 3-48 lowercase letters, numbers or dashes"),
+  welcome: z.string().optional().describe("Welcome text clients see, max 600 characters"),
+});
+
+function Swatch({ hex }: { hex: string }) {
+  return <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-full border lx-border" style={{ background: hex }} />{hex}</span>;
+}
+
+function CopilotAdmin({ workspace }: { workspace: CopilotWorkspace }) {
+  const agentName = (key?: string) => workspace.catalog.find((a) => a.key === key)?.name ?? (key === "custom" ? "Custom assistant" : key);
+
+  useHumanInTheLoop<z.infer<typeof firmSchema>>({
+    name: "update_firm_settings",
+    description: "Admin only. Change the firm's name or default jurisdiction. The user must confirm.",
+    parameters: firmSchema,
+    render: (p) => <ConfirmCard props={p} title="Update firm settings?" run={copilotUpdateFirm} lines={[
+      ["Firm name", p.args.name], ["Jurisdiction", p.args.defaultJurisdiction],
+    ]} />,
+  });
+
+  useHumanInTheLoop<z.infer<typeof detectSchema>>({
+    name: "detect_branding_from_website",
+    description: "Admin only. Read the firm's logo and colours from its website. The user must confirm.",
+    parameters: detectSchema,
+    render: (p) => <ConfirmCard props={p} title="Read branding from this website?" run={copilotDetectBranding} lines={[["Website", p.args.website]]} />,
+  });
+
+  useHumanInTheLoop<z.infer<typeof brandingSchema>>({
+    name: "update_branding",
+    description: "Admin only. Set brand colours, website or light/dark theme for the workspace and client portal. The user must confirm.",
+    parameters: brandingSchema,
+    render: (p) => <ConfirmCard props={p} title="Update branding?" run={copilotUpdateBranding} lines={[
+      ["Primary", p.args.primary ? <Swatch hex={p.args.primary} /> : undefined], ["Accent", p.args.accent ? <Swatch hex={p.args.accent} /> : undefined],
+      ["Theme", p.args.theme], ["Website", p.args.website],
+    ]} />,
+  });
+
+  useHumanInTheLoop<z.infer<typeof inviteSchema>>({
+    name: "invite_team_member",
+    description: "Admin only. Invite a colleague to the firm as admin, lawyer or staff. The user must confirm.",
+    parameters: inviteSchema,
+    render: (p) => <ConfirmCard props={p} title="Invite this person?" run={copilotInviteMember} lines={[
+      ["Email", p.args.email], ["Role", p.args.role],
+    ]} />,
+  });
+
+  useHumanInTheLoop<z.infer<typeof hireSchema>>({
+    name: "hire_assistant",
+    description: "Admin only. Hire an AI assistant from assistantCatalog for the firm. The user must confirm.",
+    parameters: hireSchema,
+    render: (p) => <ConfirmCard props={p} title="Hire this assistant?" run={copilotHireAssistant} lines={[
+      ["Assistant", p.args.name ?? agentName(p.args.agentKey)], ["Role", p.args.instructions],
+    ]} />,
+  }, [workspace.catalog]);
+
+  useHumanInTheLoop<z.infer<typeof portalSchema>>({
+    name: "update_client_portal",
+    description: "Admin only. Set the client portal address, switch it on or off, or change its welcome text. The user must confirm.",
+    parameters: portalSchema,
+    render: (p) => <ConfirmCard props={p} title="Update the client portal?" run={copilotUpdatePortal} lines={[
+      ["Address", p.args.slug ? `/portal/${p.args.slug}` : undefined],
+      ["Status", p.args.enabled === undefined ? undefined : p.args.enabled ? "On" : "Off"], ["Welcome", p.args.welcome],
+    ]} />,
+  });
+
+  return null;
+}
+
 function CopilotTools({ workspace }: { workspace: CopilotWorkspace }) {
   const router = useRouter();
   const path = usePathname();
@@ -199,6 +301,10 @@ function CopilotTools({ workspace }: { workspace: CopilotWorkspace }) {
       hiredAssistants: workspace.assistants,
       recentMatters: workspace.matters,
       recentClients: workspace.clients,
+      userIsAdmin: workspace.isAdmin,
+      setup: workspace.setup,
+      assistantCatalog: workspace.catalog,
+      portalAddress: workspace.portalSlug,
     },
   });
 
@@ -248,32 +354,127 @@ function CopilotTools({ workspace }: { workspace: CopilotWorkspace }) {
     },
   }, [router, workspace.assistants]);
 
+  const setupLeft = workspace.isAdmin && (!workspace.setup.branding || !workspace.setup.portalLive
+    || workspace.setup.assistantsHired === 0 || workspace.setup.teamSize < 2);
   useConfigureSuggestions({
     available: "before-first-message",
-    suggestions: [
-      { title: "Open matters", message: "Show me our open matters." },
-      { title: "Add a task", message: "Add a task to follow up with the client tomorrow." },
-      { title: "Which assistant?", message: "Which AI assistant should I use to draft an engagement letter?" },
-    ],
-  });
+    suggestions: setupLeft
+      ? [
+          { title: "Finish setting up", message: "What's left to set up our firm? Let's do the next step." },
+          { title: "Brand the workspace", message: "Set up our branding from our website." },
+          { title: "Open the client portal", message: "Help me switch on our client portal." },
+        ]
+      : [
+          { title: "Open matters", message: "Show me our open matters." },
+          { title: "Add a task", message: "Add a task to follow up with the client tomorrow." },
+          { title: "Which assistant?", message: "Which AI assistant should I use to draft an engagement letter?" },
+        ],
+  }, [setupLeft]);
 
   return null;
 }
 
-export function WorkspaceCopilot({ workspace, disabledReason }: { workspace: CopilotWorkspace; disabledReason: string | null }) {
+/** Keeps the chat working if the voice layer fails (e.g. the runtime is unreachable). */
+class Quiet extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() { return this.state.failed ? null : this.props.children; }
+}
+
+/** Reads each finished reply aloud while talk mode is on (in-house talking portrait, no third party). */
+function CopilotVoice({ speaker, talk, onSpeaking }: { speaker: Speaker; talk: boolean; onSpeaking: (v: boolean) => void }) {
+  const { agent } = useAgent();
+  const wasRunning = useRef(false);
+  const running = agent.isRunning;
+  useEffect(() => {
+    if (running) { wasRunning.current = true; speaker.stop(); onSpeaking(false); return; }
+    if (!wasRunning.current) return;
+    wasRunning.current = false;
+    if (!talk) return;
+    const last = [...agent.messages].reverse().find((m) => m.role === "assistant");
+    const text = typeof last?.content === "string" ? last.content : "";
+    if (!text.trim()) return;
+    const lang = /[\u0600-\u06FF]/.test(text) ? "ar-AE" : "en-US";
+    onSpeaking(true);
+    void speaker.speak(text, { lang }).finally(() => onSpeaking(false));
+  }, [running, talk, agent, speaker, onSpeaking]);
+  return null;
+}
+
+function LauncherIcon() {
+  return <span className="lexos-copilot-launch"><Sparkles className="h-[18px] w-[18px]" aria-hidden /><span className="lexos-copilot-launch-label">Copilot</span></span>;
+}
+function LauncherClose() {
+  return <X className="h-5 w-5" aria-hidden />;
+}
+
+export function WorkspaceCopilot({ workspace, disabledReason, dark = true }: { workspace: CopilotWorkspace; disabledReason: string | null; dark?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [talk, setTalk] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const face = workspace.face;
+  const speaker = useMemo(() => new Speaker(face.hireId ?? "", face.voice), [face.hireId, face.voice]);
+  useEffect(() => () => speaker.stop(), [speaker]);
+  function toggleTalk() {
+    speaker.unlock();
+    const next = !talk;
+    setTalk(next);
+    if (!next) { speaker.stop(); setSpeaking(false); }
+  }
   if (disabledReason) return null;
   return (
-    <div className="lexos-copilot">
-      <CopilotKit runtimeUrl="/api/copilotkit" useSingleEndpoint showDevConsole={false}>
+    <div className={`lexos-copilot${dark ? " dark" : ""}`}>
+      <CopilotKit runtimeUrl="/api/copilotkit" useSingleEndpoint showDevConsole={false} enableInspector={false}>
         <CopilotTools workspace={workspace} />
         <CopilotChanges workspace={workspace} />
+        <CopilotAdmin workspace={workspace} />
+        <Quiet><CopilotVoice speaker={speaker} talk={talk} onSpeaking={setSpeaking} /></Quiet>
         <CopilotPopup
-          defaultOpen={false}
+          open={open}
+          onOpenChange={setOpen}
+          width={420}
+          height={640}
+          toggleButton={{ openIcon: LauncherIcon, closeIcon: LauncherClose }}
+          header={{
+            children: ({ closeButton }) => (
+              <div className="lexos-copilot-head">
+                <div className="lexos-copilot-header">
+                  {talk
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={face.portraitUrl} alt="" className="lexos-copilot-face-thumb" />
+                    : <span aria-hidden className="lexos-copilot-mark"><Sparkles className="h-4 w-4" /></span>}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold leading-tight tracking-tight">LexOS Copilot</p>
+                    <p className="lx-muted flex items-center gap-1.5 truncate text-xs">
+                      <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-full ${speaking ? "animate-pulse lx-accent-bg" : "bg-ok"}`} />
+                      {speaking ? `${face.name} is speaking…` : `${workspace.isAdmin ? "Setup & admin assistant" : "Workspace assistant"} · ${workspace.firmName}`}
+                    </p>
+                  </div>
+                  <button type="button" onClick={toggleTalk} aria-pressed={talk}
+                    aria-label={talk ? "Turn off talking avatar" : "Turn on talking avatar"} title={talk ? "Talking avatar on" : "Talking avatar off"}
+                    className={`lexos-copilot-icon-btn${talk ? " is-on" : ""}`}>
+                    {talk ? <Volume2 className="h-4 w-4" aria-hidden /> : <VolumeX className="h-4 w-4" aria-hidden />}
+                  </button>
+                  {closeButton}
+                </div>
+                {talk && (
+                  <div className="lexos-copilot-stage">
+                    <TalkingPortrait src={face.portraitUrl} anchor={face.anchor} level={speaker.level} className="lexos-copilot-portrait" />
+                    <p className="lx-muted text-[11px]">{face.name} · replies are read aloud</p>
+                  </div>
+                )}
+              </div>
+            ),
+          }}
           labels={{
             modalHeaderTitle: "LexOS Copilot",
-            welcomeMessageText: `Hi! I can find things in ${workspace.firmName}'s workspace, take you there, and add tasks, clients and matters once you confirm.`,
-            chatInputPlaceholder: "Ask the copilot…",
+            welcomeMessageText: workspace.isAdmin
+              ? `Welcome to ${workspace.firmName}'s workspace. I can set up your firm, branding, team, AI assistants and client portal, and add clients, matters and tasks. Every change waits for your confirmation.`
+              : `Welcome to ${workspace.firmName}'s workspace. I can find anything here, take you there, and add clients, matters and tasks once you confirm.`,
+            chatInputPlaceholder: "Ask LexOS Copilot…",
             chatDisclaimerText: "AI can make mistakes. Not legal advice.",
+            chatToggleOpenLabel: "Open LexOS Copilot",
+            chatToggleCloseLabel: "Close LexOS Copilot",
           }}
         />
       </CopilotKit>
