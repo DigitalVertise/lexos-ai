@@ -120,6 +120,25 @@ export function aiRoute(): "openai" | "vercel-ai-gateway" | null {
   return null;
 }
 
+/**
+ * An OpenAI SDK client on the same route as aiProvider() (direct key or
+ * Vercel AI Gateway), for libraries that take a client instead of our
+ * provider interface, such as the CopilotKit workspace copilot.
+ */
+export async function openAICompatibleClient(): Promise<{ client: OpenAI; model: string } | null> {
+  const e = env();
+  const route = aiRoute();
+  if (route === "openai") {
+    return { client: new OpenAI({ apiKey: e.OPENAI_API_KEY!, timeout: 120_000, maxRetries: 1 }), model: e.OPENAI_MODEL };
+  }
+  if (route === "vercel-ai-gateway") {
+    const apiKey = process.env.AI_GATEWAY_API_KEY ?? await (await import("@vercel/oidc")).getVercelOidcToken();
+    const model = e.OPENAI_MODEL.includes("/") ? e.OPENAI_MODEL : `openai/${e.OPENAI_MODEL}`;
+    return { client: new OpenAI({ apiKey, baseURL: GATEWAY_URL, timeout: 120_000, maxRetries: 1 }), model };
+  }
+  return null;
+}
+
 export function aiProvider(): AIProvider {
   if (override) return override;
   const e = env();

@@ -11,6 +11,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@copilotkit/react-core": "^1.84.0",
+    "@copilotkit/react-ui": "^1.84.0",
+    "@copilotkit/runtime": "^1.84.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
     "@vercel/oidc": "^4.0.1",
@@ -39,6 +42,10 @@
   "overrides": {
     "@vercel/cli-config": {
       "zod": "$zod"
-    }
+    },
+    "zod": "$zod",
+    "undici": "^6.29.1",
+    "@fastify/busboy": "^3.2.4",
+    "graphql-scalars": "^2.0.1"
   }
 }
