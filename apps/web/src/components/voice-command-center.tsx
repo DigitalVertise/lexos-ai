@@ -1,6 +1,6 @@
 "use client";
 
-import { AudioLines, Mic, MicOff, Send, Square, Volume2, VolumeX, X } from "lucide-react";
+import { AudioLines, Mic, MicOff, Send, Sparkles, Square, Volume2, VolumeX, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Speaker } from "./speaker";
 import type { FloatingAgent } from "./floating-assistant";
