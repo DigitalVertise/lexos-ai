@@ -1,7 +1,7 @@
 import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "@/app/(auth)/actions";
-import { FloatingAssistant } from "@/components/floating-assistant";
+import { VoiceCommandCenter } from "@/components/voice-command-center";
 import { NavLinks } from "@/components/nav";
 import { WorkspaceCopilot, type CopilotWorkspace } from "@/components/workspace-copilot";
 import { Notice } from "@/components/ui";
@@ -114,7 +114,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <button className="text-sm text-muted" type="submit">Sign out ({ws.user.email})</button>
         </form>
       </main>
-      <FloatingAssistant agents={assistants} disabledReason={
+      <VoiceCommandCenter agents={assistants} disabledReason={
         !aiReady ? "The AI service is not configured yet." : !state.active ? "AI assistants are paused until a package is active." : null
       } />
       <WorkspaceCopilot workspace={copilotWorkspace} disabledReason={
